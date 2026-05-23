@@ -1,0 +1,7 @@
+streamlit>=1.35
+pandas>=2.2
+plotly>=5.22
+duckdb>=1.0
+sqlalchemy>=2.0
+snowflake-sqlalchemy>=1.6
+python-dotenv>=1.0
