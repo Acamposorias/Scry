@@ -48,6 +48,8 @@ You can also load a file from PowerShell:
 python scripts/load_dataset.py data/my_dataset.csv --table my_table
 ```
 
+For invoice batches, use **Upload invoice CSVs** in the sidebar. You can select multiple CSV files at once, then click **Generate source_data**. The app combines the CSVs into `source_data` and rebuilds the derived tables.
+
 ## Building Derived Tables
 
 After loading data into `source_data`, click **Build derived tables** in the app sidebar.

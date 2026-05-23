@@ -14,7 +14,15 @@ from src.data import (
 )
 from src.db import read_query
 from src.derived_tables import DERIVED_TABLES, build_derived_tables
-from src.ingest import list_tables, load_dataset, quote_identifier, save_uploaded_file, validate_table_name
+from src.ingest import (
+    list_tables,
+    load_dataset,
+    load_invoice_csvs,
+    quote_identifier,
+    save_uploaded_file,
+    save_uploaded_files,
+    validate_table_name,
+)
 
 
 st.set_page_config(
@@ -37,6 +45,24 @@ with st.sidebar:
             row_count = load_dataset(saved_path, clean_table_name, replace=True)
             st.cache_data.clear()
             st.success(f"Loaded {row_count:,} rows into `{clean_table_name}`.")
+        except Exception as error:
+            st.error(str(error))
+
+    st.divider()
+    invoice_csvs = st.file_uploader(
+        "Upload invoice CSVs",
+        type=["csv"],
+        accept_multiple_files=True,
+    )
+
+    if st.button("Generate source_data", disabled=not invoice_csvs, use_container_width=True):
+        try:
+            saved_paths = save_uploaded_files(invoice_csvs)
+            row_count = load_invoice_csvs(saved_paths, table_name="source_data", replace=True)
+            row_counts = build_derived_tables()
+            st.cache_data.clear()
+            summary = ", ".join(f"{name}: {count:,}" for name, count in row_counts.items())
+            st.success(f"Loaded {row_count:,} invoice rows into `source_data`. Generated tables. {summary}")
         except Exception as error:
             st.error(str(error))
 

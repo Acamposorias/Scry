@@ -1,6 +1,8 @@
 import re
 from pathlib import Path
 
+import pandas as pd
+
 from src.db import analytics_connection
 
 
@@ -47,6 +49,37 @@ def load_dataset(source_path: Path, table_name: str, replace: bool = True) -> in
     return row_count
 
 
+def load_invoice_csvs(source_paths: list[Path], table_name: str = "source_data", replace: bool = True) -> int:
+    if not source_paths:
+        raise ValueError("Upload at least one invoice CSV.")
+
+    frames = []
+
+    for source_path in source_paths:
+        if not source_path.exists():
+            raise FileNotFoundError(f"Dataset not found: {source_path}")
+
+        if source_path.suffix.lower() != ".csv":
+            raise ValueError(f"Invoice batch uploads only support CSV files: {source_path.name}")
+
+        frame = pd.read_csv(source_path, dtype=str, keep_default_na=False)
+        if "SourceFile" not in frame.columns:
+            frame.insert(0, "SourceFile", source_path.name)
+
+        frames.append(frame)
+
+    combined = pd.concat(frames, ignore_index=True, sort=False).fillna("")
+    table_identifier = quote_identifier(table_name)
+    create_mode = "or replace" if replace else ""
+
+    with analytics_connection() as connection:
+        connection.register("uploaded_invoice_csvs", combined)
+        connection.execute(f"create {create_mode} table {table_identifier} as select * from uploaded_invoice_csvs")
+        row_count = connection.execute(f"select count(*) from {table_identifier}").fetchone()[0]
+
+    return row_count
+
+
 def save_uploaded_file(uploaded_file) -> Path:
     UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
     destination = UPLOAD_DIR / uploaded_file.name
@@ -55,6 +88,10 @@ def save_uploaded_file(uploaded_file) -> Path:
         file.write(uploaded_file.getbuffer())
 
     return destination
+
+
+def save_uploaded_files(uploaded_files) -> list[Path]:
+    return [save_uploaded_file(uploaded_file) for uploaded_file in uploaded_files]
 
 
 def list_tables() -> list[str]:

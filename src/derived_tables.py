@@ -29,9 +29,9 @@ def build_derived_tables() -> dict[str, int]:
             select
                 SourceFile as source_file,
                 NumeroConsecutivo as numero_consecutivo,
-                FechaEmision as fecha_emision,
-                cast(FechaEmision as date) as fecha,
-                cast(date_trunc('month', FechaEmision) as date) as mes,
+                try_cast(FechaEmision as timestamp) as fecha_emision,
+                cast(try_cast(FechaEmision as timestamp) as date) as fecha,
+                cast(date_trunc('month', try_cast(FechaEmision as timestamp)) as date) as mes,
                 Emisor_Nombre as emisor_nombre,
                 coalesce(nullif(Emisor_NombreComercial, ''), Emisor_Nombre) as proveedor,
                 cast(Emisor_Identificacion as varchar) as emisor_identificacion,
@@ -39,23 +39,30 @@ def build_derived_tables() -> dict[str, int]:
                 cast(Receptor_Identificacion as varchar) as receptor_identificacion,
                 NumeroLinea as numero_linea,
                 CodigoCABYS as codigo_cabys,
-                round(Cantidad, 2) as cantidad,
+                round(try_cast(Cantidad as double), 2) as cantidad,
                 UnidadMedida as unidad_medida,
                 TipoTransaccion as tipo_transaccion,
                 Detalle as detalle,
-                round(PrecioUnitario, 2) as precio_unitario,
-                round(MontoTotal, 2) as monto_total,
-                round(SubTotal, 2) as subtotal,
-                round(BaseImponible, 2) as base_imponible,
+                round(try_cast(PrecioUnitario as double), 2) as precio_unitario,
+                round(try_cast(MontoTotal as double), 2) as monto_total,
+                round(try_cast(SubTotal as double), 2) as subtotal,
+                round(try_cast(BaseImponible as double), 2) as base_imponible,
                 round(try_cast(ImpuestoNeto as double), 2) as impuesto_neto,
                 round(try_cast(MontoTotalLinea as double), 2) as monto_total_linea,
                 Impuesto_Codigo as impuesto_codigo,
                 Impuesto_CodigoTarifaIVA as impuesto_codigo_tarifa_iva,
-                round(Impuesto_Tarifa, 2) as impuesto_tarifa,
+                round(try_cast(Impuesto_Tarifa as double), 2) as impuesto_tarifa,
                 round(try_cast(Impuesto_Monto as double), 2) as impuesto_monto,
-                round(greatest(coalesce(MontoTotal, 0) - coalesce(SubTotal, 0), 0), 2) as descuento_estimado
+                round(
+                    greatest(
+                        coalesce(try_cast(MontoTotal as double), 0)
+                        - coalesce(try_cast(SubTotal as double), 0),
+                        0
+                    ),
+                    2
+                ) as descuento_estimado
             from source_data
-            where FechaEmision <= current_timestamp
+            where try_cast(FechaEmision as timestamp) <= cast(current_timestamp as timestamp)
             """
         )
 
