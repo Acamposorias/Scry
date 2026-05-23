@@ -1,7 +1,7 @@
 import re
 from pathlib import Path
 
-import duckdb
+from src.db import analytics_connection
 
 
 DATABASE_PATH = Path("data/app.duckdb")
@@ -27,7 +27,6 @@ def load_dataset(source_path: Path, table_name: str, replace: bool = True) -> in
     if not source_path.exists():
         raise FileNotFoundError(f"Dataset not found: {source_path}")
 
-    DATABASE_PATH.parent.mkdir(parents=True, exist_ok=True)
     extension = source_path.suffix.lower()
 
     if extension == ".csv":
@@ -41,7 +40,7 @@ def load_dataset(source_path: Path, table_name: str, replace: bool = True) -> in
     table_identifier = quote_identifier(table_name)
     sql = f"create {create_mode} table {table_identifier} as select * from {reader_sql}"
 
-    with duckdb.connect(str(DATABASE_PATH)) as connection:
+    with analytics_connection() as connection:
         connection.execute(sql, [str(source_path)])
         row_count = connection.execute(f"select count(*) from {table_identifier}").fetchone()[0]
 
@@ -59,17 +58,17 @@ def save_uploaded_file(uploaded_file) -> Path:
 
 
 def list_tables() -> list[str]:
-    if not DATABASE_PATH.exists():
+    try:
+        with analytics_connection() as connection:
+            rows = connection.execute(
+                """
+                select table_name
+                from information_schema.tables
+                where table_schema = 'main'
+                order by table_name
+                """
+            ).fetchall()
+    except Exception:
         return []
-
-    with duckdb.connect(str(DATABASE_PATH)) as connection:
-        rows = connection.execute(
-            """
-            select table_name
-            from information_schema.tables
-            where table_schema = 'main'
-            order by table_name
-            """
-        ).fetchall()
 
     return [row[0] for row in rows]

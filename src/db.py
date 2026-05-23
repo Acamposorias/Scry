@@ -1,4 +1,5 @@
 from contextlib import contextmanager
+import os
 from pathlib import Path
 from urllib.parse import quote_plus
 
@@ -17,6 +18,47 @@ def duckdb_connection(path: Path):
         yield connection
     finally:
         connection.close()
+
+
+@contextmanager
+def motherduck_connection(config: dict):
+    token = config.get("token")
+    database = config.get("database", "")
+
+    if not token:
+        raise ValueError("Missing MotherDuck token. Add `token` under `[database]` in Streamlit secrets.")
+
+    previous_token = os.environ.get("MOTHERDUCK_TOKEN")
+    os.environ["MOTHERDUCK_TOKEN"] = token
+
+    connection_string = f"md:{database}" if database else "md:"
+    connection = duckdb.connect(connection_string)
+    try:
+        yield connection
+    finally:
+        connection.close()
+        if previous_token is None:
+            os.environ.pop("MOTHERDUCK_TOKEN", None)
+        else:
+            os.environ["MOTHERDUCK_TOKEN"] = previous_token
+
+
+@contextmanager
+def analytics_connection():
+    config = get_database_config()
+    engine = config.get("engine", "duckdb").lower()
+
+    if engine == "duckdb":
+        with duckdb_connection(get_duckdb_path(config)) as connection:
+            yield connection
+        return
+
+    if engine == "motherduck":
+        with motherduck_connection(config) as connection:
+            yield connection
+        return
+
+    raise ValueError(f"`{engine}` does not support DuckDB-native writes.")
 
 
 def snowflake_url(config: dict) -> str:
@@ -46,7 +88,11 @@ def read_query(sql: str, params: dict | None = None) -> pd.DataFrame:
     engine = config.get("engine", "duckdb").lower()
 
     if engine == "duckdb":
-        with duckdb_connection(get_duckdb_path(config)) as connection:
+        with analytics_connection() as connection:
+            return connection.execute(sql, params or {}).df()
+
+    if engine == "motherduck":
+        with analytics_connection() as connection:
             return connection.execute(sql, params or {}).df()
 
     if engine == "snowflake":

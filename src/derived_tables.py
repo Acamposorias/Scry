@@ -1,6 +1,4 @@
-import duckdb
-
-from src.ingest import DATABASE_PATH
+from src.db import analytics_connection
 
 
 DERIVED_TABLES = [
@@ -12,10 +10,7 @@ DERIVED_TABLES = [
 
 
 def build_derived_tables() -> dict[str, int]:
-    if not DATABASE_PATH.exists():
-        raise FileNotFoundError(f"DuckDB database not found: {DATABASE_PATH}")
-
-    with duckdb.connect(str(DATABASE_PATH)) as connection:
+    with analytics_connection() as connection:
         source_exists = connection.execute(
             """
             select count(*)

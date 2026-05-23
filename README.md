@@ -81,6 +81,17 @@ engine = "duckdb"
 path = "data/app.duckdb"
 ```
 
+For Streamlit Cloud with MotherDuck, set app secrets to:
+
+```toml
+[database]
+engine = "motherduck"
+database = "warehouse_dashboard"
+token = "your_motherduck_token"
+```
+
+In MotherDuck, create a database named `warehouse_dashboard` or change the `database` value to match your database name. Generate the token from your MotherDuck account settings, then paste it into Streamlit Cloud under **Settings > Secrets** for the deployed app.
+
 When you are ready for Snowflake, change the same file to:
 
 ```toml
