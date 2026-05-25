@@ -1,4 +1,5 @@
 import re
+from dataclasses import dataclass
 from pathlib import Path
 
 import pandas as pd
@@ -9,6 +10,13 @@ from src.db import analytics_connection
 DATABASE_PATH = Path("data/app.duckdb")
 UPLOAD_DIR = Path("data/uploads")
 VALID_TABLE_NAME = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+
+
+@dataclass(frozen=True)
+class InvoiceLoadResult:
+    total_rows_uploaded: int
+    duplicate_rows_removed: int
+    final_rows_loaded: int
 
 
 def validate_table_name(table_name: str) -> str:
@@ -49,7 +57,42 @@ def load_dataset(source_path: Path, table_name: str, replace: bool = True) -> in
     return row_count
 
 
-def load_invoice_csvs(source_paths: list[Path], table_name: str = "source_data", replace: bool = True) -> int:
+def deduplicate_invoice_lines(frame: pd.DataFrame) -> tuple[pd.DataFrame, int]:
+    required_columns = ["NumeroConsecutivo", "NumeroLinea"]
+    missing_columns = [column for column in required_columns if column not in frame.columns]
+
+    if missing_columns:
+        raise ValueError(f"Missing invoice dedupe columns: {', '.join(missing_columns)}")
+
+    deduped = frame.copy()
+    original_count = len(deduped)
+
+    for column in required_columns:
+        deduped[column] = deduped[column].astype(str).str.strip()
+
+    deduped["_original_row_order"] = range(len(deduped))
+    has_dedupe_key = ~(
+        deduped["NumeroConsecutivo"].eq("")
+        & deduped["NumeroLinea"].eq("")
+    )
+
+    valid_key_rows = deduped.loc[has_dedupe_key].drop_duplicates(
+        subset=required_columns,
+        keep="first",
+    )
+    missing_key_rows = deduped.loc[~has_dedupe_key]
+
+    deduped = (
+        pd.concat([valid_key_rows, missing_key_rows], ignore_index=True, sort=False)
+        .sort_values("_original_row_order")
+        .drop(columns=["_original_row_order"])
+        .reset_index(drop=True)
+    )
+
+    return deduped, original_count - len(deduped)
+
+
+def load_invoice_csvs(source_paths: list[Path], table_name: str = "source_data", replace: bool = True) -> InvoiceLoadResult:
     if not source_paths:
         raise ValueError("Upload at least one invoice CSV.")
 
@@ -69,6 +112,8 @@ def load_invoice_csvs(source_paths: list[Path], table_name: str = "source_data",
         frames.append(frame)
 
     combined = pd.concat(frames, ignore_index=True, sort=False).fillna("")
+    total_rows_uploaded = len(combined)
+    combined, duplicate_rows_removed = deduplicate_invoice_lines(combined)
     table_identifier = quote_identifier(table_name)
     create_mode = "or replace" if replace else ""
 
@@ -77,7 +122,11 @@ def load_invoice_csvs(source_paths: list[Path], table_name: str = "source_data",
         connection.execute(f"create {create_mode} table {table_identifier} as select * from uploaded_invoice_csvs")
         row_count = connection.execute(f"select count(*) from {table_identifier}").fetchone()[0]
 
-    return row_count
+    return InvoiceLoadResult(
+        total_rows_uploaded=total_rows_uploaded,
+        duplicate_rows_removed=duplicate_rows_removed,
+        final_rows_loaded=row_count,
+    )
 
 
 def save_uploaded_file(uploaded_file) -> Path:

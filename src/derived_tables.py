@@ -26,9 +26,37 @@ def build_derived_tables() -> dict[str, int]:
         connection.execute(
             """
             create or replace table clean_invoice_lines as
+            with ranked_source as (
+                select
+                    *,
+                    row_number() over (
+                        partition by
+                            trim(cast(NumeroConsecutivo as varchar)),
+                            trim(cast(NumeroLinea as varchar))
+                        order by SourceFile
+                    ) as duplicate_rank
+                from source_data
+                where not (
+                    coalesce(trim(cast(NumeroConsecutivo as varchar)), '') = ''
+                    and coalesce(trim(cast(NumeroLinea as varchar)), '') = ''
+                )
+            ),
+            source_with_missing_keys as (
+                select
+                    *,
+                    1 as duplicate_rank
+                from source_data
+                where coalesce(trim(cast(NumeroConsecutivo as varchar)), '') = ''
+                  and coalesce(trim(cast(NumeroLinea as varchar)), '') = ''
+            ),
+            deduped_source as (
+                select * from ranked_source
+                union all
+                select * from source_with_missing_keys
+            )
             select
                 SourceFile as source_file,
-                NumeroConsecutivo as numero_consecutivo,
+                trim(cast(NumeroConsecutivo as varchar)) as numero_consecutivo,
                 try_cast(FechaEmision as timestamp) as fecha_emision,
                 cast(try_cast(FechaEmision as timestamp) as date) as fecha,
                 cast(date_trunc('month', try_cast(FechaEmision as timestamp)) as date) as mes,
@@ -37,7 +65,7 @@ def build_derived_tables() -> dict[str, int]:
                 cast(Emisor_Identificacion as varchar) as emisor_identificacion,
                 Receptor_Nombre as receptor_nombre,
                 cast(Receptor_Identificacion as varchar) as receptor_identificacion,
-                NumeroLinea as numero_linea,
+                trim(cast(NumeroLinea as varchar)) as numero_linea,
                 CodigoCABYS as codigo_cabys,
                 round(try_cast(Cantidad as double), 2) as cantidad,
                 UnidadMedida as unidad_medida,
@@ -61,8 +89,9 @@ def build_derived_tables() -> dict[str, int]:
                     ),
                     2
                 ) as descuento_estimado
-            from source_data
+            from deduped_source
             where try_cast(FechaEmision as timestamp) <= cast(current_timestamp as timestamp)
+              and duplicate_rank = 1
             """
         )
 

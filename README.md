@@ -48,7 +48,7 @@ You can also load a file from PowerShell:
 python scripts/load_dataset.py data/my_dataset.csv --table my_table
 ```
 
-For invoice batches, use **Upload invoice CSVs** in the sidebar. You can select multiple CSV files at once, then click **Generate source_data**. The app combines the CSVs into `source_data` and rebuilds the derived tables.
+For invoice batches, use **Upload invoice CSVs** in the sidebar. You can select multiple CSV files at once, then click **Generate source_data**. The app combines the CSVs into `source_data`, removes duplicate invoice lines with the same `NumeroConsecutivo` + `NumeroLinea`, and rebuilds the derived tables.
 
 ## Building Derived Tables
 
@@ -56,7 +56,7 @@ After loading data into `source_data`, click **Build derived tables** in the app
 
 This creates:
 
-- `clean_invoice_lines`: cleaned and rounded invoice line fields.
+- `clean_invoice_lines`: cleaned, rounded, and deduplicated invoice line fields.
 - `price_history`: one row per product line with supplier, product, price, tax, and invoice date.
 - `latest_price_list`: the most recent price by supplier, product, unit, CABYS code, and tax rate.
 - `price_changes`: detected unit-price changes over time.

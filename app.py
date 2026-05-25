@@ -58,11 +58,17 @@ with st.sidebar:
     if st.button("Generate source_data", disabled=not invoice_csvs, use_container_width=True):
         try:
             saved_paths = save_uploaded_files(invoice_csvs)
-            row_count = load_invoice_csvs(saved_paths, table_name="source_data", replace=True)
+            load_result = load_invoice_csvs(saved_paths, table_name="source_data", replace=True)
             row_counts = build_derived_tables()
             st.cache_data.clear()
             summary = ", ".join(f"{name}: {count:,}" for name, count in row_counts.items())
-            st.success(f"Loaded {row_count:,} invoice rows into `source_data`. Generated tables. {summary}")
+            st.success(
+                "Generated `source_data`. "
+                f"Uploaded {load_result.total_rows_uploaded:,} rows, "
+                f"removed {load_result.duplicate_rows_removed:,} duplicate invoice lines, "
+                f"loaded {load_result.final_rows_loaded:,} rows. "
+                f"Generated tables. {summary}"
+            )
         except Exception as error:
             st.error(str(error))
 
@@ -83,6 +89,51 @@ if tables:
     if not derived_counts.empty:
         with st.expander("Generated DuckDB tables", expanded=False):
             st.dataframe(derived_counts, use_container_width=True, hide_index=True)
+
+        with st.expander("Derived table previews", expanded=True):
+            available_derived_tables = [
+                table_name
+                for table_name in DERIVED_TABLES
+                if table_name in set(derived_counts["table"])
+            ]
+            selected_derived_table = st.selectbox(
+                "Derived table",
+                available_derived_tables,
+                key="derived_table_preview",
+            )
+            preview_limit = st.number_input(
+                "Preview rows",
+                min_value=10,
+                max_value=500,
+                value=50,
+                step=10,
+            )
+
+            derived_preview = read_query(
+                f"select * from {quote_identifier(selected_derived_table)} limit $limit",
+                {"limit": preview_limit},
+            )
+            st.dataframe(derived_preview, use_container_width=True, hide_index=True)
+
+            full_derived_table = read_query(f"select * from {quote_identifier(selected_derived_table)}")
+            derived_parquet_buffer = io.BytesIO()
+            full_derived_table.to_parquet(derived_parquet_buffer, index=False)
+
+            derived_download_cols = st.columns(2)
+            derived_download_cols[0].download_button(
+                "Download derived CSV",
+                data=full_derived_table.to_csv(index=False).encode("utf-8"),
+                file_name=f"{selected_derived_table}.csv",
+                mime="text/csv",
+                use_container_width=True,
+            )
+            derived_download_cols[1].download_button(
+                "Download derived Parquet",
+                data=derived_parquet_buffer.getvalue(),
+                file_name=f"{selected_derived_table}.parquet",
+                mime="application/octet-stream",
+                use_container_width=True,
+            )
 
     with st.expander(f"Preview `{preview_table}`", expanded=True):
         preview = read_query(f"select * from {quote_identifier(preview_table)} limit 50")
