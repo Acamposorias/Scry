@@ -1,6 +1,7 @@
 import streamlit as st
 import plotly.express as px
 import base64
+from io import BytesIO
 
 LOGO_PATH = "assets/scry-logo.png"
 FAVICON_PATH = "assets/scry-favicon.png"
@@ -47,6 +48,19 @@ def style_chart(fig):
         title_font=dict(color="#f5f0e8"),
     )
     return fig
+
+
+def table_to_excel_bytes(table, sheet_name: str) -> bytes:
+    safe_sheet_name = "".join(
+        "_" if character in r'[]:*?/\\' else character
+        for character in sheet_name
+    )[:31] or "Sheet1"
+    output = BytesIO()
+
+    with pd.ExcelWriter(output, engine="openpyxl") as writer:
+        table.to_excel(writer, index=False, sheet_name=safe_sheet_name)
+
+    return output.getvalue()
 
 from src.data import (
     has_table,
