@@ -1,5 +1,6 @@
 import streamlit as st
 import plotly.express as px
+import pandas as pd
 import base64
 from io import BytesIO
 
@@ -280,10 +281,10 @@ if tables:
         full_table = read_query(f"select * from {quote_identifier(selected_table)}")
 
         st.download_button(
-            "Download CSV",
-            data=full_table.to_csv(index=False).encode("utf-8"),
-            file_name=f"{selected_table}.csv",
-            mime="text/csv",
+            "Download Excel",
+            data=table_to_excel_bytes(full_table, selected_table),
+            file_name=f"{selected_table}.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             use_container_width=True,
         )
 
