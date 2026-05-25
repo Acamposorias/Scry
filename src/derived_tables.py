@@ -24,8 +24,15 @@ def build_derived_tables() -> dict[str, int]:
         if not source_exists:
             raise ValueError("Load a dataset into `source_data` before building derived tables.")
 
+        source_columns = {
+            row[0].lower()
+            for row in connection.execute("describe source_data").fetchall()
+        }
+        codigo_moneda_expression = "CodigoMoneda" if "codigomoneda" in source_columns else "'CRC'"
+        tipo_cambio_expression = "TipoCambio" if "tipocambio" in source_columns else "'1'"
+
         connection.execute(
-            """
+            f"""
             create or replace table clean_invoice_lines as
             with ranked_source as (
                 select
@@ -67,8 +74,8 @@ def build_derived_tables() -> dict[str, int]:
                     cast(Emisor_Identificacion as varchar) as emisor_identificacion,
                     Receptor_Nombre as receptor_nombre,
                     cast(Receptor_Identificacion as varchar) as receptor_identificacion,
-                    coalesce(nullif(upper(trim(cast(CodigoMoneda as varchar))), ''), 'CRC') as codigo_moneda,
-                    coalesce(nullif(try_cast(TipoCambio as double), 0), 1) as tipo_cambio,
+                    coalesce(nullif(upper(trim(cast({codigo_moneda_expression} as varchar))), ''), 'CRC') as codigo_moneda,
+                    coalesce(nullif(try_cast({tipo_cambio_expression} as double), 0), 1) as tipo_cambio,
                     trim(cast(NumeroLinea as varchar)) as numero_linea,
                     CodigoCABYS as codigo_cabys,
                     round(try_cast(Cantidad as double), 2) as cantidad,
