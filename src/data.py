@@ -42,12 +42,13 @@ def load_invoice_monthly() -> pd.DataFrame:
     return read_query(
         """
         select
-            date_trunc('month', FechaEmision) as month,
+            date_trunc('month', try_cast(FechaEmision as timestamp)) as month,
             count(distinct NumeroConsecutivo) as invoices,
             sum(try_cast(MontoTotalLinea as double)) as total_amount,
             sum(try_cast(Impuesto_Monto as double)) as tax_amount,
             sum(try_cast(Cantidad as double)) as units
         from source_data
+        where try_cast(FechaEmision as timestamp) is not null
         group by 1
         order by 1
         """
