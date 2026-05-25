@@ -2,6 +2,10 @@ import streamlit as st
 import plotly.express as px
 import io
 
+LOGO_PATH = "assets/scry-logo.png"
+FAVICON_PATH = "assets/scry-favicon.png"
+BANNER_PATH = "assets/scry-banner.png"
+
 from src.data import (
     has_table,
     load_invoice_metrics,
@@ -25,14 +29,102 @@ from src.ingest import (
 
 
 st.set_page_config(
-    page_title="Warehouse Dashboard",
-    page_icon=":bar_chart:",
+    page_title="Scry",
+    page_icon=FAVICON_PATH,
     layout="wide",
 )
 
-st.title("Warehouse Dashboard")
+st.markdown(
+    """
+    <style>
+    :root {
+        --scry-bg: #030303;
+        --scry-panel: #080808;
+        --scry-panel-soft: #0f0f0e;
+        --scry-border: #242421;
+        --scry-text: #faf8f2;
+        --scry-muted: #b8b4aa;
+        --scry-white: #f5f0e8;
+        --scry-white-soft: #d8d2c7;
+    }
+
+    .stApp {
+        background: #030303;
+        color: var(--scry-text);
+    }
+
+    [data-testid="stSidebar"] {
+        background: linear-gradient(180deg, #030303 0%, #090909 100%);
+        border-right: 1px solid var(--scry-border);
+    }
+
+    [data-testid="stSidebar"] img {
+        border: 1px solid var(--scry-border);
+    }
+
+    h1, h2, h3, label, [data-testid="stMetricLabel"] {
+        color: var(--scry-text) !important;
+    }
+
+    p, span, div, [data-testid="stMarkdownContainer"] {
+        color: var(--scry-text);
+    }
+
+    [data-testid="stExpander"] {
+        background: rgba(8, 8, 8, 0.86);
+        border: 1px solid var(--scry-border);
+    }
+
+    [data-testid="stMetric"] {
+        background: linear-gradient(180deg, rgba(14, 14, 13, 0.96), rgba(5, 5, 5, 0.96));
+        border: 1px solid var(--scry-border);
+        padding: 1rem;
+    }
+
+    [data-testid="stMetricValue"] {
+        color: var(--scry-white) !important;
+    }
+
+    .stButton > button,
+    .stDownloadButton > button {
+        background: #f2eee6;
+        color: #030303;
+        border: 1px solid #ffffff;
+        font-weight: 700;
+    }
+
+    .stButton > button:hover,
+    .stDownloadButton > button:hover {
+        background: #ffffff;
+        color: #030303;
+        border-color: #ffffff;
+    }
+
+    [data-baseweb="select"] > div,
+    [data-baseweb="input"] > div,
+    textarea {
+        background-color: var(--scry-panel) !important;
+        border-color: var(--scry-border) !important;
+        color: var(--scry-text) !important;
+    }
+
+    [data-testid="stDataFrame"] {
+        border: 1px solid var(--scry-border);
+    }
+
+    hr {
+        border-color: var(--scry-border);
+    }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
+
+st.image(BANNER_PATH, use_container_width=True)
 
 with st.sidebar:
+    st.image(LOGO_PATH, use_container_width=True)
+    st.divider()
     st.header("Load Data")
     uploaded_file = st.file_uploader("Upload CSV or Parquet", type=["csv", "parquet", "pq"])
     table_name = st.text_input("DuckDB table", value="source_data")
