@@ -64,15 +64,16 @@ st.markdown(
 
     .scry-banner {
         width: 100%;
-        height: 260px;
+        height: 320px;
         overflow: hidden;
+        background: #030303;
         border-bottom: 1px solid var(--scry-border);
     }
 
     .scry-banner img {
         width: 100%;
         height: 100%;
-        object-fit: cover;
+        object-fit: contain;
         object-position: center;
         display: block;
     }
