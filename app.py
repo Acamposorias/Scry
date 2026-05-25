@@ -1,5 +1,6 @@
 import streamlit as st
 import plotly.express as px
+import base64
 
 LOGO_PATH = "assets/scry-logo.png"
 FAVICON_PATH = "assets/scry-favicon.png"
@@ -61,11 +62,19 @@ st.markdown(
         border: 1px solid var(--scry-border);
     }
 
+    .scry-banner {
+        width: 100%;
+        height: 260px;
+        overflow: hidden;
+        border-bottom: 1px solid var(--scry-border);
+    }
+
     .scry-banner img {
-        max-height: 260px;
+        width: 100%;
+        height: 100%;
         object-fit: cover;
         object-position: center;
-        border-bottom: 1px solid var(--scry-border);
+        display: block;
     }
 
     h1, h2, h3, label, [data-testid="stMetricLabel"] {
@@ -131,9 +140,17 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-st.markdown('<div class="scry-banner">', unsafe_allow_html=True)
-st.image(BANNER_PATH, use_container_width=True)
-st.markdown("</div>", unsafe_allow_html=True)
+with open(BANNER_PATH, "rb") as banner_file:
+    banner_data = base64.b64encode(banner_file.read()).decode("utf-8")
+
+st.markdown(
+    f"""
+    <div class="scry-banner">
+        <img src="data:image/png;base64,{banner_data}" alt="Scry banner" />
+    </div>
+    """,
+    unsafe_allow_html=True,
+)
 
 with st.sidebar:
     st.image(LOGO_PATH, use_container_width=True)
