@@ -1,6 +1,5 @@
 import streamlit as st
 import plotly.express as px
-import io
 
 LOGO_PATH = "assets/scry-logo.png"
 FAVICON_PATH = "assets/scry-favicon.png"
@@ -62,6 +61,13 @@ st.markdown(
         border: 1px solid var(--scry-border);
     }
 
+    .scry-banner img {
+        max-height: 260px;
+        object-fit: cover;
+        object-position: center;
+        border-bottom: 1px solid var(--scry-border);
+    }
+
     h1, h2, h3, label, [data-testid="stMetricLabel"] {
         color: var(--scry-text) !important;
     }
@@ -88,15 +94,20 @@ st.markdown(
     .stButton > button,
     .stDownloadButton > button {
         background: #f2eee6;
-        color: #030303;
+        color: #030303 !important;
         border: 1px solid #ffffff;
         font-weight: 700;
+    }
+
+    .stButton > button *,
+    .stDownloadButton > button * {
+        color: #030303 !important;
     }
 
     .stButton > button:hover,
     .stDownloadButton > button:hover {
         background: #ffffff;
-        color: #030303;
+        color: #030303 !important;
         border-color: #ffffff;
     }
 
@@ -120,7 +131,9 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
+st.markdown('<div class="scry-banner">', unsafe_allow_html=True)
 st.image(BANNER_PATH, use_container_width=True)
+st.markdown("</div>", unsafe_allow_html=True)
 
 with st.sidebar:
     st.image(LOGO_PATH, use_container_width=True)
@@ -192,22 +205,12 @@ if tables:
         st.dataframe(preview, use_container_width=True, hide_index=True)
 
         full_table = read_query(f"select * from {quote_identifier(selected_table)}")
-        parquet_buffer = io.BytesIO()
-        full_table.to_parquet(parquet_buffer, index=False)
 
-        download_cols = st.columns(2)
-        download_cols[0].download_button(
+        st.download_button(
             "Download CSV",
             data=full_table.to_csv(index=False).encode("utf-8"),
             file_name=f"{selected_table}.csv",
             mime="text/csv",
-            use_container_width=True,
-        )
-        download_cols[1].download_button(
-            "Download Parquet",
-            data=parquet_buffer.getvalue(),
-            file_name=f"{selected_table}.parquet",
-            mime="application/octet-stream",
             use_container_width=True,
         )
 
