@@ -1,4 +1,5 @@
 import re
+import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -10,6 +11,9 @@ from src.db import analytics_connection
 DATABASE_PATH = Path("data/app.duckdb")
 UPLOAD_DIR = Path("data/uploads")
 VALID_TABLE_NAME = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+FACTURA_ELECTRONICA_NS = {
+    "fe": "https://cdn.comprobanteselectronicos.go.cr/xml-schemas/v4.4/facturaElectronica"
+}
 
 
 @dataclass(frozen=True)
@@ -120,6 +124,118 @@ def load_invoice_csvs(source_paths: list[Path], table_name: str = "source_data",
     with analytics_connection() as connection:
         connection.register("uploaded_invoice_csvs", combined)
         connection.execute(f"create {create_mode} table {table_identifier} as select * from uploaded_invoice_csvs")
+        row_count = connection.execute(f"select count(*) from {table_identifier}").fetchone()[0]
+
+    return InvoiceLoadResult(
+        total_rows_uploaded=total_rows_uploaded,
+        duplicate_rows_removed=duplicate_rows_removed,
+        final_rows_loaded=row_count,
+    )
+
+
+def parse_invoice_xml(xml_path: Path) -> list[dict]:
+    try:
+        tree = ET.parse(xml_path)
+    except ET.ParseError:
+        return []
+
+    root = tree.getroot()
+
+    def tx(path: str, default: str = "") -> str:
+        return root.findtext(path, default=default, namespaces=FACTURA_ELECTRONICA_NS)
+
+    invoice_fields = {
+        "SourceFile": xml_path.name,
+        "Clave": tx("fe:Clave"),
+        "NumeroConsecutivo": tx("fe:NumeroConsecutivo"),
+        "FechaEmision": tx("fe:FechaEmision"),
+        "Emisor_Nombre": tx("fe:Emisor/fe:Nombre"),
+        "Emisor_NombreComercial": tx("fe:Emisor/fe:NombreComercial"),
+        "Emisor_Identificacion": tx("fe:Emisor/fe:Identificacion/fe:Numero"),
+        "Receptor_Nombre": tx("fe:Receptor/fe:Nombre"),
+        "Receptor_Identificacion": tx("fe:Receptor/fe:Identificacion/fe:Numero"),
+    }
+
+    rows = []
+
+    for line in root.findall("fe:DetalleServicio/fe:LineaDetalle", FACTURA_ELECTRONICA_NS):
+
+        def ltx(path: str, default: str = "") -> str:
+            return line.findtext(path, default=default, namespaces=FACTURA_ELECTRONICA_NS)
+
+        row = {
+            **invoice_fields,
+            "NumeroLinea": ltx("fe:NumeroLinea"),
+            "CodigoCABYS": ltx("fe:CodigoCABYS"),
+            "Cantidad": ltx("fe:Cantidad"),
+            "UnidadMedida": ltx("fe:UnidadMedida"),
+            "TipoTransaccion": ltx("fe:TipoTransaccion"),
+            "Detalle": ltx("fe:Detalle"),
+            "PrecioUnitario": ltx("fe:PrecioUnitario"),
+            "MontoTotal": ltx("fe:MontoTotal"),
+            "SubTotal": ltx("fe:SubTotal"),
+            "BaseImponible": ltx("fe:BaseImponible"),
+            "ImpuestoAsumidoEmisorFabrica": ltx("fe:ImpuestoAsumidoEmisorFabrica"),
+            "ImpuestoNeto": ltx("fe:ImpuestoNeto"),
+            "MontoTotalLinea": ltx("fe:MontoTotalLinea"),
+        }
+
+        tax = line.find("fe:Impuesto", FACTURA_ELECTRONICA_NS)
+        if tax is not None:
+
+            def itx(path: str, default: str = "") -> str:
+                return tax.findtext(path, default=default, namespaces=FACTURA_ELECTRONICA_NS)
+
+            row.update(
+                {
+                    "Impuesto_Codigo": itx("fe:Codigo"),
+                    "Impuesto_CodigoTarifaIVA": itx("fe:CodigoTarifaIVA"),
+                    "Impuesto_Tarifa": itx("fe:Tarifa"),
+                    "Impuesto_Monto": itx("fe:Monto"),
+                }
+            )
+        else:
+            row.update(
+                {
+                    "Impuesto_Codigo": "",
+                    "Impuesto_CodigoTarifaIVA": "",
+                    "Impuesto_Tarifa": "",
+                    "Impuesto_Monto": "",
+                }
+            )
+
+        rows.append(row)
+
+    return rows
+
+
+def load_invoice_xmls(source_paths: list[Path], table_name: str = "source_data", replace: bool = True) -> InvoiceLoadResult:
+    if not source_paths:
+        raise ValueError("Upload at least one invoice XML.")
+
+    rows = []
+
+    for source_path in source_paths:
+        if not source_path.exists():
+            raise FileNotFoundError(f"Invoice XML not found: {source_path}")
+
+        if source_path.suffix.lower() != ".xml":
+            raise ValueError(f"Invoice XML uploads only support XML files: {source_path.name}")
+
+        rows.extend(parse_invoice_xml(source_path))
+
+    if not rows:
+        raise ValueError("No invoice line items were found in the uploaded XML files.")
+
+    combined = pd.DataFrame(rows).fillna("")
+    total_rows_uploaded = len(combined)
+    combined, duplicate_rows_removed = deduplicate_invoice_lines(combined)
+    table_identifier = quote_identifier(table_name)
+    create_mode = "or replace" if replace else ""
+
+    with analytics_connection() as connection:
+        connection.register("uploaded_invoice_xmls", combined)
+        connection.execute(f"create {create_mode} table {table_identifier} as select * from uploaded_invoice_xmls")
         row_count = connection.execute(f"select count(*) from {table_identifier}").fetchone()[0]
 
     return InvoiceLoadResult(

@@ -50,6 +50,8 @@ python scripts/load_dataset.py data/my_dataset.csv --table my_table
 
 For invoice batches, use **Upload invoice CSVs** in the sidebar. You can select multiple CSV files at once, then click **Generate source_data**. The app combines the CSVs into `source_data`, removes duplicate invoice lines with the same `NumeroConsecutivo` + `NumeroLinea`, and rebuilds the derived tables.
 
+For raw Costa Rica factura electronica XML files, use **Upload invoice XMLs** and click **Generate source_data from XML**. The app parses each XML into invoice line rows, removes duplicate invoice lines, loads `source_data`, and rebuilds the derived tables.
+
 ## Building Derived Tables
 
 After loading data into `source_data`, click **Build derived tables** in the app sidebar.

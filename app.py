@@ -63,6 +63,7 @@ from src.ingest import (
     list_tables,
     load_dataset,
     load_invoice_csvs,
+    load_invoice_xmls,
     quote_identifier,
     save_uploaded_file,
     save_uploaded_files,
@@ -229,6 +230,30 @@ with st.sidebar:
             st.success(
                 "Generated `source_data`. "
                 f"Uploaded {load_result.total_rows_uploaded:,} rows, "
+                f"removed {load_result.duplicate_rows_removed:,} duplicate invoice lines, "
+                f"loaded {load_result.final_rows_loaded:,} rows. "
+                f"Generated tables. {summary}"
+            )
+        except Exception as error:
+            st.error(str(error))
+
+    st.divider()
+    invoice_xmls = st.file_uploader(
+        "Upload invoice XMLs",
+        type=["xml"],
+        accept_multiple_files=True,
+    )
+
+    if st.button("Generate source_data from XML", disabled=not invoice_xmls, use_container_width=True):
+        try:
+            saved_paths = save_uploaded_files(invoice_xmls)
+            load_result = load_invoice_xmls(saved_paths, table_name="source_data", replace=True)
+            row_counts = build_derived_tables()
+            st.cache_data.clear()
+            summary = ", ".join(f"{name}: {count:,}" for name, count in row_counts.items())
+            st.success(
+                "Generated `source_data` from XML. "
+                f"Parsed {load_result.total_rows_uploaded:,} invoice rows, "
                 f"removed {load_result.duplicate_rows_removed:,} duplicate invoice lines, "
                 f"loaded {load_result.final_rows_loaded:,} rows. "
                 f"Generated tables. {summary}"
