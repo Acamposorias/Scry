@@ -273,7 +273,7 @@ if tables:
             use_container_width=True,
         )
 
-if has_table("source_data"):
+if has_table("clean_invoice_lines"):
     metrics = load_invoice_metrics().iloc[0]
     monthly = load_invoice_monthly()
     top_customers = load_top_customers()
@@ -327,4 +327,7 @@ if has_table("source_data"):
 
     st.stop()
 
-st.info("Upload invoice XML files, then click `Generate source_data from XML` to build the dashboard.")
+if has_table("source_data"):
+    st.info("`source_data` exists. Click `Build derived tables` to prepare the dashboard tables.")
+else:
+    st.info("Upload invoice XML files, then click `Generate source_data from XML` to build the dashboard.")
