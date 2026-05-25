@@ -6,6 +6,40 @@ LOGO_PATH = "assets/scry-logo.png"
 FAVICON_PATH = "assets/scry-favicon.png"
 BANNER_PATH = "assets/scry-banner.png"
 
+SCRY_CHART_COLORS = [
+    "#f5f0e8",
+    "#c8c3ba",
+    "#8f8b84",
+    "#ffffff",
+]
+
+
+def style_chart(fig):
+    fig.update_layout(
+        paper_bgcolor="#030303",
+        plot_bgcolor="#080808",
+        font_color="#f5f0e8",
+        colorway=SCRY_CHART_COLORS,
+        legend=dict(
+            bgcolor="rgba(3,3,3,0)",
+            font=dict(color="#f5f0e8"),
+        ),
+        margin=dict(l=20, r=20, t=35, b=20),
+    )
+    fig.update_xaxes(
+        gridcolor="#242421",
+        linecolor="#3a3a36",
+        tickfont=dict(color="#d8d2c7"),
+        title_font=dict(color="#f5f0e8"),
+    )
+    fig.update_yaxes(
+        gridcolor="#242421",
+        linecolor="#3a3a36",
+        tickfont=dict(color="#d8d2c7"),
+        title_font=dict(color="#f5f0e8"),
+    )
+    return fig
+
 from src.data import (
     has_table,
     load_invoice_metrics,
@@ -252,6 +286,7 @@ if has_table("source_data"):
         markers=True,
         labels={"month": "Month", "total_amount": "Total amount"},
     )
+    trend = style_chart(trend)
     st.plotly_chart(trend, use_container_width=True)
 
     customer_col, product_col = st.columns(2)
@@ -265,6 +300,7 @@ if has_table("source_data"):
             orientation="h",
             labels={"total_amount": "Total amount", "customer": "Customer"},
         )
+        customer_chart = style_chart(customer_chart)
         st.plotly_chart(customer_chart, use_container_width=True)
 
     with product_col:
@@ -276,6 +312,7 @@ if has_table("source_data"):
             orientation="h",
             labels={"total_amount": "Total amount", "product": "Product"},
         )
+        product_chart = style_chart(product_chart)
         st.plotly_chart(product_chart, use_container_width=True)
 
     with st.expander("Monthly invoice data"):
@@ -312,6 +349,7 @@ trend = px.line(
     color="region",
     markers=True,
 )
+trend = style_chart(trend)
 st.plotly_chart(trend, use_container_width=True)
 
 st.subheader("Regional Summary")
@@ -321,6 +359,7 @@ summary = px.bar(
     y=metric,
     color="region",
 )
+summary = style_chart(summary)
 st.plotly_chart(summary, use_container_width=True)
 
 with st.expander("Raw monthly data"):
