@@ -61,13 +61,9 @@ from src.db import read_query
 from src.derived_tables import build_derived_tables
 from src.ingest import (
     list_tables,
-    load_dataset,
-    load_invoice_csvs,
     load_invoice_xmls,
     quote_identifier,
-    save_uploaded_file,
     save_uploaded_files,
-    validate_table_name,
 )
 
 
@@ -218,44 +214,6 @@ with st.sidebar:
     st.image(LOGO_PATH, use_container_width=True)
     st.divider()
     st.header("Load Data")
-    uploaded_file = st.file_uploader("Upload CSV or Parquet", type=["csv", "parquet", "pq"])
-    table_name = st.text_input("DuckDB table", value="source_data")
-
-    if st.button("Load into DuckDB", disabled=uploaded_file is None, use_container_width=True):
-        try:
-            clean_table_name = validate_table_name(table_name)
-            saved_path = save_uploaded_file(uploaded_file)
-            row_count = load_dataset(saved_path, clean_table_name, replace=True)
-            st.cache_data.clear()
-            st.success(f"Loaded {row_count:,} rows into `{clean_table_name}`.")
-        except Exception as error:
-            st.error(str(error))
-
-    st.divider()
-    invoice_csvs = st.file_uploader(
-        "Upload invoice CSVs",
-        type=["csv"],
-        accept_multiple_files=True,
-    )
-
-    if st.button("Generate source_data", disabled=not invoice_csvs, use_container_width=True):
-        try:
-            saved_paths = save_uploaded_files(invoice_csvs)
-            load_result = load_invoice_csvs(saved_paths, table_name="source_data", replace=True)
-            row_counts = build_derived_tables()
-            st.cache_data.clear()
-            summary = ", ".join(f"{name}: {count:,}" for name, count in row_counts.items())
-            st.success(
-                "Generated `source_data`. "
-                f"Uploaded {load_result.total_rows_uploaded:,} rows, "
-                f"removed {load_result.duplicate_rows_removed:,} duplicate invoice lines, "
-                f"loaded {load_result.final_rows_loaded:,} rows. "
-                f"Generated tables. {summary}"
-            )
-        except Exception as error:
-            st.error(str(error))
-
-    st.divider()
     invoice_xmls = st.file_uploader(
         "Upload invoice XMLs",
         type=["xml"],
