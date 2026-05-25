@@ -3,6 +3,7 @@ from src.db import analytics_connection
 
 DERIVED_TABLES = [
     "clean_invoice_lines",
+    "invoice_summary",
     "price_history",
     "latest_price_list",
     "price_changes",
@@ -92,6 +93,84 @@ def build_derived_tables() -> dict[str, int]:
             from deduped_source
             where try_cast(FechaEmision as timestamp) <= cast(current_timestamp as timestamp)
               and duplicate_rank = 1
+            """
+        )
+
+        connection.execute(
+            """
+            create or replace table invoice_summary as
+            select
+                fecha as "FECHA FACTURA",
+                cast(null as varchar) as "FECHA PAGO",
+                proveedor as "PROVEEDOR",
+                try_cast(right(numero_consecutivo, 5) as bigint) as "FACTURA",
+                cast(null as varchar) as "NOTA DE CREDITO",
+                cast(null as varchar) as "RUBRO",
+                cast(null as varchar) as "TIPO",
+                cast(null as varchar) as "FISICA",
+                cast(null as varchar) as "Unnamed: 8",
+                round(
+                    sum(
+                        case
+                            when impuesto_tarifa = 13 then coalesce(subtotal, 0)
+                            else 0
+                        end
+                    ),
+                    2
+                ) as "SUBTOTAL 13%",
+                round(
+                    sum(
+                        case
+                            when impuesto_tarifa = 1 then coalesce(subtotal, 0)
+                            else 0
+                        end
+                    ),
+                    2
+                ) as "SUBTOTAL 1%",
+                round(
+                    sum(
+                        case
+                            when impuesto_tarifa = 13 then coalesce(descuento_estimado, 0)
+                            else 0
+                        end
+                    ),
+                    2
+                ) as "DESCUENTO 13%",
+                round(
+                    sum(
+                        case
+                            when impuesto_tarifa = 1 then coalesce(descuento_estimado, 0)
+                            else 0
+                        end
+                    ),
+                    2
+                ) as "DESCUENTO 1%",
+                round(sum(coalesce(descuento_estimado, 0)), 2) as "DESCUENTO TOTAL",
+                round(
+                    sum(
+                        case
+                            when impuesto_tarifa = 13 then coalesce(impuesto_monto, 0)
+                            else 0
+                        end
+                    ),
+                    2
+                ) as "IVA 13%",
+                round(
+                    sum(
+                        case
+                            when impuesto_tarifa = 1 then coalesce(impuesto_monto, 0)
+                            else 0
+                        end
+                    ),
+                    2
+                ) as "IVA 1%",
+                round(sum(coalesce(impuesto_monto, 0)), 2) as "SUBTOTAL",
+                round(sum(coalesce(monto_total_linea, 0)), 2) as "TOTAL",
+                cast(null as varchar) as "Unnamed: 18",
+                round(sum(coalesce(monto_total_linea, 0)), 2) as "FINAL"
+            from clean_invoice_lines
+            group by fecha, proveedor, numero_consecutivo
+            order by fecha, proveedor, numero_consecutivo
             """
         )
 
