@@ -15,6 +15,14 @@ SCRY_CHART_COLORS = [
 
 
 def style_chart(fig):
+    for index, trace in enumerate(fig.data):
+        color = SCRY_CHART_COLORS[index % len(SCRY_CHART_COLORS)]
+
+        if hasattr(trace, "marker"):
+            trace.marker.color = color
+        if hasattr(trace, "line"):
+            trace.line.color = color
+
     fig.update_layout(
         paper_bgcolor="#030303",
         plot_bgcolor="#080808",
