@@ -54,45 +54,60 @@ def build_derived_tables() -> dict[str, int]:
                 select * from ranked_source
                 union all
                 select * from source_with_missing_keys
+            ),
+            typed_lines as (
+                select
+                    SourceFile as source_file,
+                    trim(cast(NumeroConsecutivo as varchar)) as numero_consecutivo,
+                    try_cast(FechaEmision as timestamp) as fecha_emision,
+                    cast(try_cast(FechaEmision as timestamp) as date) as fecha,
+                    cast(date_trunc('month', try_cast(FechaEmision as timestamp)) as date) as mes,
+                    Emisor_Nombre as emisor_nombre,
+                    coalesce(nullif(Emisor_NombreComercial, ''), Emisor_Nombre) as proveedor,
+                    cast(Emisor_Identificacion as varchar) as emisor_identificacion,
+                    Receptor_Nombre as receptor_nombre,
+                    cast(Receptor_Identificacion as varchar) as receptor_identificacion,
+                    coalesce(nullif(upper(trim(cast(CodigoMoneda as varchar))), ''), 'CRC') as codigo_moneda,
+                    coalesce(nullif(try_cast(TipoCambio as double), 0), 1) as tipo_cambio,
+                    trim(cast(NumeroLinea as varchar)) as numero_linea,
+                    CodigoCABYS as codigo_cabys,
+                    round(try_cast(Cantidad as double), 2) as cantidad,
+                    UnidadMedida as unidad_medida,
+                    TipoTransaccion as tipo_transaccion,
+                    Detalle as detalle,
+                    round(try_cast(PrecioUnitario as double), 2) as precio_unitario,
+                    round(try_cast(MontoTotal as double), 2) as monto_total,
+                    round(try_cast(SubTotal as double), 2) as subtotal,
+                    round(try_cast(BaseImponible as double), 2) as base_imponible,
+                    round(try_cast(ImpuestoNeto as double), 2) as impuesto_neto,
+                    round(try_cast(MontoTotalLinea as double), 2) as monto_total_linea,
+                    Impuesto_Codigo as impuesto_codigo,
+                    Impuesto_CodigoTarifaIVA as impuesto_codigo_tarifa_iva,
+                    round(try_cast(Impuesto_Tarifa as double), 2) as impuesto_tarifa,
+                    round(try_cast(Impuesto_Monto as double), 2) as impuesto_monto,
+                    round(
+                        greatest(
+                            coalesce(try_cast(MontoTotal as double), 0)
+                            - coalesce(try_cast(SubTotal as double), 0),
+                            0
+                        ),
+                        2
+                    ) as descuento_estimado
+                from deduped_source
+                where try_cast(FechaEmision as timestamp) <= cast(current_timestamp as timestamp)
+                  and duplicate_rank = 1
             )
             select
-                SourceFile as source_file,
-                trim(cast(NumeroConsecutivo as varchar)) as numero_consecutivo,
-                try_cast(FechaEmision as timestamp) as fecha_emision,
-                cast(try_cast(FechaEmision as timestamp) as date) as fecha,
-                cast(date_trunc('month', try_cast(FechaEmision as timestamp)) as date) as mes,
-                Emisor_Nombre as emisor_nombre,
-                coalesce(nullif(Emisor_NombreComercial, ''), Emisor_Nombre) as proveedor,
-                cast(Emisor_Identificacion as varchar) as emisor_identificacion,
-                Receptor_Nombre as receptor_nombre,
-                cast(Receptor_Identificacion as varchar) as receptor_identificacion,
-                trim(cast(NumeroLinea as varchar)) as numero_linea,
-                CodigoCABYS as codigo_cabys,
-                round(try_cast(Cantidad as double), 2) as cantidad,
-                UnidadMedida as unidad_medida,
-                TipoTransaccion as tipo_transaccion,
-                Detalle as detalle,
-                round(try_cast(PrecioUnitario as double), 2) as precio_unitario,
-                round(try_cast(MontoTotal as double), 2) as monto_total,
-                round(try_cast(SubTotal as double), 2) as subtotal,
-                round(try_cast(BaseImponible as double), 2) as base_imponible,
-                round(try_cast(ImpuestoNeto as double), 2) as impuesto_neto,
-                round(try_cast(MontoTotalLinea as double), 2) as monto_total_linea,
-                Impuesto_Codigo as impuesto_codigo,
-                Impuesto_CodigoTarifaIVA as impuesto_codigo_tarifa_iva,
-                round(try_cast(Impuesto_Tarifa as double), 2) as impuesto_tarifa,
-                round(try_cast(Impuesto_Monto as double), 2) as impuesto_monto,
-                round(
-                    greatest(
-                        coalesce(try_cast(MontoTotal as double), 0)
-                        - coalesce(try_cast(SubTotal as double), 0),
-                        0
-                    ),
-                    2
-                ) as descuento_estimado
-            from deduped_source
-            where try_cast(FechaEmision as timestamp) <= cast(current_timestamp as timestamp)
-              and duplicate_rank = 1
+                *,
+                round(precio_unitario * tipo_cambio, 2) as precio_unitario_crc,
+                round(monto_total * tipo_cambio, 2) as monto_total_crc,
+                round(subtotal * tipo_cambio, 2) as subtotal_crc,
+                round(base_imponible * tipo_cambio, 2) as base_imponible_crc,
+                round(impuesto_neto * tipo_cambio, 2) as impuesto_neto_crc,
+                round(monto_total_linea * tipo_cambio, 2) as monto_total_linea_crc,
+                round(impuesto_monto * tipo_cambio, 2) as impuesto_monto_crc,
+                round(descuento_estimado * tipo_cambio, 2) as descuento_estimado_crc
+            from typed_lines
             """
         )
 
@@ -112,7 +127,7 @@ def build_derived_tables() -> dict[str, int]:
                 round(
                     sum(
                         case
-                            when impuesto_tarifa = 13 then coalesce(subtotal, 0)
+                            when impuesto_tarifa = 13 then coalesce(subtotal_crc, 0)
                             else 0
                         end
                     ),
@@ -121,7 +136,7 @@ def build_derived_tables() -> dict[str, int]:
                 round(
                     sum(
                         case
-                            when impuesto_tarifa = 1 then coalesce(subtotal, 0)
+                            when impuesto_tarifa = 1 then coalesce(subtotal_crc, 0)
                             else 0
                         end
                     ),
@@ -130,7 +145,7 @@ def build_derived_tables() -> dict[str, int]:
                 round(
                     sum(
                         case
-                            when impuesto_tarifa = 13 then coalesce(descuento_estimado, 0)
+                            when impuesto_tarifa = 13 then coalesce(descuento_estimado_crc, 0)
                             else 0
                         end
                     ),
@@ -139,17 +154,17 @@ def build_derived_tables() -> dict[str, int]:
                 round(
                     sum(
                         case
-                            when impuesto_tarifa = 1 then coalesce(descuento_estimado, 0)
+                            when impuesto_tarifa = 1 then coalesce(descuento_estimado_crc, 0)
                             else 0
                         end
                     ),
                     2
                 ) as "DESCUENTO 1%",
-                round(sum(coalesce(descuento_estimado, 0)), 2) as "DESCUENTO TOTAL",
+                round(sum(coalesce(descuento_estimado_crc, 0)), 2) as "DESCUENTO TOTAL",
                 round(
                     sum(
                         case
-                            when impuesto_tarifa = 13 then coalesce(impuesto_monto, 0)
+                            when impuesto_tarifa = 13 then coalesce(impuesto_monto_crc, 0)
                             else 0
                         end
                     ),
@@ -158,16 +173,16 @@ def build_derived_tables() -> dict[str, int]:
                 round(
                     sum(
                         case
-                            when impuesto_tarifa = 1 then coalesce(impuesto_monto, 0)
+                            when impuesto_tarifa = 1 then coalesce(impuesto_monto_crc, 0)
                             else 0
                         end
                     ),
                     2
                 ) as "IVA 1%",
-                round(sum(coalesce(impuesto_monto, 0)), 2) as "SUBTOTAL",
-                round(sum(coalesce(monto_total_linea, 0)), 2) as "TOTAL",
+                round(sum(coalesce(impuesto_monto_crc, 0)), 2) as "SUBTOTAL",
+                round(sum(coalesce(monto_total_linea_crc, 0)), 2) as "TOTAL",
                 cast(null as varchar) as "Unnamed: 18",
-                round(sum(coalesce(monto_total_linea, 0)), 2) as "FINAL"
+                round(sum(coalesce(monto_total_linea_crc, 0)), 2) as "FINAL"
             from clean_invoice_lines
             group by fecha, proveedor, numero_consecutivo
             order by fecha, proveedor, numero_consecutivo

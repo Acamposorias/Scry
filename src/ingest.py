@@ -154,6 +154,8 @@ def parse_invoice_xml(xml_path: Path) -> list[dict]:
         "Emisor_Identificacion": tx("fe:Emisor/fe:Identificacion/fe:Numero"),
         "Receptor_Nombre": tx("fe:Receptor/fe:Nombre"),
         "Receptor_Identificacion": tx("fe:Receptor/fe:Identificacion/fe:Numero"),
+        "CodigoMoneda": tx("fe:ResumenFactura/fe:CodigoTipoMoneda/fe:CodigoMoneda", "CRC"),
+        "TipoCambio": tx("fe:ResumenFactura/fe:CodigoTipoMoneda/fe:TipoCambio", "1"),
     }
 
     rows = []
