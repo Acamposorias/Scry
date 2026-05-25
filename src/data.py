@@ -31,7 +31,7 @@ def load_invoice_metrics() -> pd.DataFrame:
             count(distinct Receptor_Identificacion) as customers,
             sum(try_cast(MontoTotalLinea as double)) as total_amount,
             sum(try_cast(Impuesto_Monto as double)) as tax_amount,
-            sum(Cantidad) as units
+            sum(try_cast(Cantidad as double)) as units
         from source_data
         """
     )
@@ -46,7 +46,7 @@ def load_invoice_monthly() -> pd.DataFrame:
             count(distinct NumeroConsecutivo) as invoices,
             sum(try_cast(MontoTotalLinea as double)) as total_amount,
             sum(try_cast(Impuesto_Monto as double)) as tax_amount,
-            sum(Cantidad) as units
+            sum(try_cast(Cantidad as double)) as units
         from source_data
         group by 1
         order by 1
@@ -77,7 +77,7 @@ def load_top_products(limit: int = 15) -> pd.DataFrame:
         """
         select
             Detalle as product,
-            sum(Cantidad) as units,
+            sum(try_cast(Cantidad as double)) as units,
             sum(try_cast(MontoTotalLinea as double)) as total_amount
         from source_data
         group by 1

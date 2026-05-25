@@ -265,8 +265,9 @@ def list_tables() -> list[str]:
             rows = connection.execute(
                 """
                 select table_name
-                from information_schema.tables
-                where table_schema = 'main'
+                from duckdb_tables()
+                where schema_name = 'main'
+                  and not internal
                 order by table_name
                 """
             ).fetchall()

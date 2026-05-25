@@ -52,8 +52,6 @@ from src.data import (
     has_table,
     load_invoice_metrics,
     load_invoice_monthly,
-    load_monthly_sales,
-    load_region_summary,
     load_top_customers,
     load_top_products,
 )
@@ -329,47 +327,4 @@ if has_table("source_data"):
 
     st.stop()
 
-with st.sidebar:
-    st.divider()
-    st.header("Sample Filters")
-    metric = st.selectbox("Metric", ["revenue", "orders"], index=0)
-
-monthly_sales = load_monthly_sales()
-region_summary = load_region_summary()
-
-if monthly_sales.empty:
-    st.info("No data yet. Run `python scripts/seed_duckdb.py` to create local sample data.")
-    st.stop()
-
-total_revenue = monthly_sales["revenue"].sum()
-total_orders = monthly_sales["orders"].sum()
-average_order_value = total_revenue / total_orders if total_orders else 0
-
-metric_cols = st.columns(3)
-metric_cols[0].metric("Revenue", f"${total_revenue:,.0f}")
-metric_cols[1].metric("Orders", f"{total_orders:,.0f}")
-metric_cols[2].metric("Avg. order value", f"${average_order_value:,.2f}")
-
-st.subheader("Monthly Trend")
-trend = px.line(
-    monthly_sales,
-    x="month",
-    y=metric,
-    color="region",
-    markers=True,
-)
-trend = style_chart(trend)
-st.plotly_chart(trend, use_container_width=True)
-
-st.subheader("Regional Summary")
-summary = px.bar(
-    region_summary,
-    x="region",
-    y=metric,
-    color="region",
-)
-summary = style_chart(summary)
-st.plotly_chart(summary, use_container_width=True)
-
-with st.expander("Raw monthly data"):
-    st.dataframe(monthly_sales, use_container_width=True, hide_index=True)
+st.info("Upload invoice XML files, then click `Generate source_data from XML` to build the dashboard.")
