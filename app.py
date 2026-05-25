@@ -164,6 +164,24 @@ st.markdown(
         border-color: #ffffff;
     }
 
+    [data-testid="stSidebar"] .stButton > button {
+        background: #050505;
+        color: #f5f0e8 !important;
+        border: 1px solid #3a3a36;
+    }
+
+    [data-testid="stSidebar"] .stButton > button *,
+    [data-testid="stSidebar"] .stButton > button p,
+    [data-testid="stSidebar"] .stButton > button span {
+        color: #f5f0e8 !important;
+    }
+
+    [data-testid="stSidebar"] .stButton > button:hover {
+        background: #111111;
+        color: #ffffff !important;
+        border-color: #f5f0e8;
+    }
+
     [data-baseweb="select"] > div,
     [data-baseweb="input"] > div,
     textarea {
