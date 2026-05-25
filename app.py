@@ -8,12 +8,11 @@ from src.data import (
     load_invoice_monthly,
     load_monthly_sales,
     load_region_summary,
-    load_table_counts,
     load_top_customers,
     load_top_products,
 )
 from src.db import read_query
-from src.derived_tables import DERIVED_TABLES, build_derived_tables
+from src.derived_tables import build_derived_tables
 from src.ingest import (
     list_tables,
     load_dataset,
@@ -82,64 +81,25 @@ with st.sidebar:
             st.error(str(error))
 
     tables = list_tables()
-    preview_table = st.selectbox("Preview table", tables, index=0 if tables else None, disabled=not tables)
 
 if tables:
-    derived_counts = load_table_counts(tuple(DERIVED_TABLES))
-    if not derived_counts.empty:
-        with st.expander("Generated DuckDB tables", expanded=False):
-            st.dataframe(derived_counts, use_container_width=True, hide_index=True)
+    with st.expander("Table preview", expanded=True):
+        selected_table = st.selectbox("Table", tables, key="table_preview")
+        preview_limit = st.number_input(
+            "Preview rows",
+            min_value=10,
+            max_value=500,
+            value=50,
+            step=10,
+        )
 
-        with st.expander("Derived table previews", expanded=True):
-            available_derived_tables = [
-                table_name
-                for table_name in DERIVED_TABLES
-                if table_name in set(derived_counts["table"])
-            ]
-            selected_derived_table = st.selectbox(
-                "Derived table",
-                available_derived_tables,
-                key="derived_table_preview",
-            )
-            preview_limit = st.number_input(
-                "Preview rows",
-                min_value=10,
-                max_value=500,
-                value=50,
-                step=10,
-            )
-
-            derived_preview = read_query(
-                f"select * from {quote_identifier(selected_derived_table)} limit $limit",
-                {"limit": preview_limit},
-            )
-            st.dataframe(derived_preview, use_container_width=True, hide_index=True)
-
-            full_derived_table = read_query(f"select * from {quote_identifier(selected_derived_table)}")
-            derived_parquet_buffer = io.BytesIO()
-            full_derived_table.to_parquet(derived_parquet_buffer, index=False)
-
-            derived_download_cols = st.columns(2)
-            derived_download_cols[0].download_button(
-                "Download derived CSV",
-                data=full_derived_table.to_csv(index=False).encode("utf-8"),
-                file_name=f"{selected_derived_table}.csv",
-                mime="text/csv",
-                use_container_width=True,
-            )
-            derived_download_cols[1].download_button(
-                "Download derived Parquet",
-                data=derived_parquet_buffer.getvalue(),
-                file_name=f"{selected_derived_table}.parquet",
-                mime="application/octet-stream",
-                use_container_width=True,
-            )
-
-    with st.expander(f"Preview `{preview_table}`", expanded=True):
-        preview = read_query(f"select * from {quote_identifier(preview_table)} limit 50")
+        preview = read_query(
+            f"select * from {quote_identifier(selected_table)} limit $limit",
+            {"limit": preview_limit},
+        )
         st.dataframe(preview, use_container_width=True, hide_index=True)
 
-        full_table = read_query(f"select * from {quote_identifier(preview_table)}")
+        full_table = read_query(f"select * from {quote_identifier(selected_table)}")
         parquet_buffer = io.BytesIO()
         full_table.to_parquet(parquet_buffer, index=False)
 
@@ -147,14 +107,14 @@ if tables:
         download_cols[0].download_button(
             "Download CSV",
             data=full_table.to_csv(index=False).encode("utf-8"),
-            file_name=f"{preview_table}.csv",
+            file_name=f"{selected_table}.csv",
             mime="text/csv",
             use_container_width=True,
         )
         download_cols[1].download_button(
             "Download Parquet",
             data=parquet_buffer.getvalue(),
-            file_name=f"{preview_table}.parquet",
+            file_name=f"{selected_table}.parquet",
             mime="application/octet-stream",
             use_container_width=True,
         )
