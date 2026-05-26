@@ -4,6 +4,7 @@ from src.db import analytics_connection
 DERIVED_TABLES = [
     "clean_invoice_lines",
     "invoice_lines",
+    "facturas_individuales",
     "invoice_summary",
     "price_history",
     "latest_price_list",
@@ -146,6 +147,74 @@ def build_derived_tables() -> dict[str, int]:
                 tipo_cambio
             from clean_invoice_lines
             order by fecha_emision, proveedor, numero_consecutivo
+            """
+        )
+
+        connection.execute(
+            """
+            create or replace table facturas_individuales as
+            select
+                numero_consecutivo as "NumeroConsecutivo",
+                min(fecha_emision) as "FechaEmision",
+                any_value(proveedor) as "Emisor_NombreComercial",
+                round(
+                    sum(
+                        case
+                            when impuesto_tarifa = 13 then coalesce(subtotal_crc, 0)
+                            else 0
+                        end
+                    ),
+                    2
+                ) as "ITEMS 13%",
+                round(
+                    sum(
+                        case
+                            when impuesto_tarifa = 1 then coalesce(subtotal_crc, 0)
+                            else 0
+                        end
+                    ),
+                    2
+                ) as "ITEMS 1%",
+                round(
+                    sum(
+                        case
+                            when impuesto_tarifa = 13 then coalesce(descuento_estimado_crc, 0)
+                            else 0
+                        end
+                    ),
+                    2
+                ) as "DESCUENTO 13%",
+                round(
+                    sum(
+                        case
+                            when impuesto_tarifa = 1 then coalesce(descuento_estimado_crc, 0)
+                            else 0
+                        end
+                    ),
+                    2
+                ) as "DESCUENTO 1%",
+                round(
+                    sum(
+                        case
+                            when impuesto_tarifa = 13 then coalesce(impuesto_neto_crc, 0)
+                            else 0
+                        end
+                    ),
+                    2
+                ) as "IVA 13%",
+                round(
+                    sum(
+                        case
+                            when impuesto_tarifa = 1 then coalesce(impuesto_neto_crc, 0)
+                            else 0
+                        end
+                    ),
+                    2
+                ) as "IVA 1%",
+                round(sum(coalesce(monto_total_linea_crc, 0)), 2) as "SUBTOTAL"
+            from clean_invoice_lines
+            group by numero_consecutivo
+            order by min(fecha_emision), any_value(proveedor), numero_consecutivo
             """
         )
 
