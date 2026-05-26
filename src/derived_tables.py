@@ -238,23 +238,11 @@ def build_derived_tables() -> dict[str, int]:
             )
             select
                 proveedor,
-                emisor_nombre,
-                emisor_identificacion,
-                codigo_cabys,
                 detalle,
-                unidad_medida,
                 precio_unitario,
                 impuesto_tarifa,
-                impuesto_monto,
                 fecha_emision as ultima_fecha_emision,
-                numero_consecutivo as ultimo_numero_consecutivo,
-                receptor_nombre as ultimo_receptor_nombre,
-                receptor_identificacion as ultimo_receptor_identificacion,
-                cantidad as ultima_cantidad,
-                subtotal as ultimo_subtotal,
-                monto_total_linea as ultimo_monto_total_linea,
-                descuento_estimado as ultimo_descuento_estimado,
-                source_file
+                numero_consecutivo as ultimo_numero_consecutivo
             from ranked
             where row_rank = 1
             order by proveedor, detalle
