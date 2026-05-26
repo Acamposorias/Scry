@@ -74,6 +74,7 @@ from src.db import read_query
 from src.derived_tables import build_derived_tables
 from src.ingest import (
     list_tables,
+    load_credit_note_xmls,
     load_invoice_xmls,
     quote_identifier,
     save_uploaded_files,
@@ -231,6 +232,13 @@ with st.sidebar:
         "Upload invoice XMLs",
         type=["xml"],
         accept_multiple_files=True,
+        key="invoice_xmls",
+    )
+    credit_note_xmls = st.file_uploader(
+        "Upload credit note XMLs",
+        type=["xml"],
+        accept_multiple_files=True,
+        key="credit_note_xmls",
     )
 
     if st.button("Generate source_data from XML", disabled=not invoice_xmls, use_container_width=True):
@@ -246,6 +254,20 @@ with st.sidebar:
                 f"removed {load_result.duplicate_rows_removed:,} duplicate invoice lines, "
                 f"loaded {load_result.final_rows_loaded:,} rows. "
                 f"Generated tables. {summary}"
+            )
+        except Exception as error:
+            st.error(str(error))
+
+    if st.button("Generate credit_notes from XML", disabled=not credit_note_xmls, use_container_width=True):
+        try:
+            saved_paths = save_uploaded_files(credit_note_xmls)
+            load_result = load_credit_note_xmls(saved_paths, table_name="credit_notes", replace=True)
+            st.cache_data.clear()
+            st.success(
+                "Generated `credit_notes` from XML. "
+                f"Parsed {load_result.total_rows_uploaded:,} credit note rows, "
+                f"removed {load_result.duplicate_rows_removed:,} duplicate credit note lines, "
+                f"loaded {load_result.final_rows_loaded:,} rows."
             )
         except Exception as error:
             st.error(str(error))
