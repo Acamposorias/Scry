@@ -72,13 +72,13 @@ from src.data import (
 )
 from src.db import read_query
 from src.derived_tables import build_derived_tables
-from src.ingest import (
-    list_tables,
-    load_credit_note_xmls,
-    load_invoice_xmls,
-    quote_identifier,
-    save_uploaded_files,
-)
+from src import ingest
+
+list_tables = ingest.list_tables
+load_credit_note_xmls = getattr(ingest, "load_credit_note_xmls", None)
+load_invoice_xmls = ingest.load_invoice_xmls
+quote_identifier = ingest.quote_identifier
+save_uploaded_files = ingest.save_uploaded_files
 
 
 st.set_page_config(
@@ -258,7 +258,14 @@ with st.sidebar:
         except Exception as error:
             st.error(str(error))
 
-    if st.button("Generate credit_notes from XML", disabled=not credit_note_xmls, use_container_width=True):
+    if load_credit_note_xmls is None:
+        st.warning("Credit note loading is not available in this deployment yet. Reboot the app after the latest code finishes deploying.")
+
+    if st.button(
+        "Generate credit_notes from XML",
+        disabled=not credit_note_xmls or load_credit_note_xmls is None,
+        use_container_width=True,
+    ):
         try:
             saved_paths = save_uploaded_files(credit_note_xmls)
             load_result = load_credit_note_xmls(saved_paths, table_name="credit_notes", replace=True)
