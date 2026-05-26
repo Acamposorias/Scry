@@ -125,12 +125,9 @@ def build_derived_tables() -> dict[str, int]:
                 fecha as "FECHA FACTURA",
                 cast(null as varchar) as "FECHA PAGO",
                 proveedor as "PROVEEDOR",
-                try_cast(right(numero_consecutivo, 5) as bigint) as "FACTURA",
+                numero_consecutivo as "FACTURA",
                 cast(null as varchar) as "NOTA DE CREDITO",
-                cast(null as varchar) as "RUBRO",
-                cast(null as varchar) as "TIPO",
-                cast(null as varchar) as "FISICA",
-                cast(null as varchar) as "Unnamed: 8",
+                receptor_nombre as "RUBRO",
                 round(
                     sum(
                         case
@@ -188,10 +185,9 @@ def build_derived_tables() -> dict[str, int]:
                 ) as "IVA 1%",
                 round(sum(coalesce(impuesto_monto_crc, 0)), 2) as "SUBTOTAL",
                 round(sum(coalesce(monto_total_linea_crc, 0)), 2) as "TOTAL",
-                cast(null as varchar) as "Unnamed: 18",
                 round(sum(coalesce(monto_total_linea_crc, 0)), 2) as "FINAL"
             from clean_invoice_lines
-            group by fecha, proveedor, numero_consecutivo
+            group by fecha, proveedor, numero_consecutivo, receptor_nombre
             order by fecha, proveedor, numero_consecutivo
             """
         )

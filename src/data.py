@@ -28,7 +28,7 @@ def load_invoice_metrics() -> pd.DataFrame:
         select
             count(distinct numero_consecutivo) as invoices,
             count(*) as line_items,
-            count(distinct receptor_identificacion) as customers,
+            count(distinct emisor_identificacion) as providers,
             sum(monto_total_linea_crc) as total_amount,
             sum(impuesto_monto_crc) as tax_amount,
             sum(cantidad) as units
@@ -56,11 +56,11 @@ def load_invoice_monthly() -> pd.DataFrame:
 
 
 @st.cache_data(ttl=600)
-def load_top_customers(limit: int = 15) -> pd.DataFrame:
+def load_top_providers(limit: int = 15) -> pd.DataFrame:
     return read_query(
         """
         select
-            receptor_nombre as customer,
+            proveedor,
             count(distinct numero_consecutivo) as invoices,
             sum(monto_total_linea_crc) as total_amount
         from clean_invoice_lines
@@ -77,7 +77,7 @@ def load_top_products(limit: int = 15) -> pd.DataFrame:
     return read_query(
         """
         select
-            detalle as product,
+            detalle as item,
             sum(cantidad) as units,
             sum(monto_total_linea_crc) as total_amount
         from clean_invoice_lines
@@ -86,35 +86,4 @@ def load_top_products(limit: int = 15) -> pd.DataFrame:
         limit $limit
         """,
         {"limit": limit},
-    )
-
-
-@st.cache_data(ttl=600)
-def load_monthly_sales() -> pd.DataFrame:
-    return read_query(
-        """
-        select
-            month,
-            region,
-            sum(revenue) as revenue,
-            sum(orders) as orders
-        from sales
-        group by month, region
-        order by month, region
-        """
-    )
-
-
-@st.cache_data(ttl=600)
-def load_region_summary() -> pd.DataFrame:
-    return read_query(
-        """
-        select
-            region,
-            sum(revenue) as revenue,
-            sum(orders) as orders
-        from sales
-        group by region
-        order by revenue desc
-        """
     )

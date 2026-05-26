@@ -67,7 +67,7 @@ from src.data import (
     has_table,
     load_invoice_metrics,
     load_invoice_monthly,
-    load_top_customers,
+    load_top_providers,
     load_top_products,
 )
 from src.db import read_query
@@ -291,53 +291,53 @@ if tables:
 if has_table("clean_invoice_lines"):
     metrics = load_invoice_metrics().iloc[0]
     monthly = load_invoice_monthly()
-    top_customers = load_top_customers()
+    top_providers = load_top_providers()
     top_products = load_top_products()
 
     metric_cols = st.columns(4)
-    metric_cols[0].metric("Total amount", f"${metrics['total_amount']:,.0f}")
-    metric_cols[1].metric("Invoices", f"{metrics['invoices']:,.0f}")
-    metric_cols[2].metric("Customers", f"{metrics['customers']:,.0f}")
+    metric_cols[0].metric("Amount due", f"${metrics['total_amount']:,.0f}")
+    metric_cols[1].metric("Invoices to pay", f"{metrics['invoices']:,.0f}")
+    metric_cols[2].metric("Providers", f"{metrics['providers']:,.0f}")
     metric_cols[3].metric("Line items", f"{metrics['line_items']:,.0f}")
 
-    st.subheader("Monthly Invoice Trend")
+    st.subheader("Monthly Payables")
     trend = px.line(
         monthly,
         x="month",
         y="total_amount",
         markers=True,
-        labels={"month": "Month", "total_amount": "Total amount"},
+        labels={"month": "Month", "total_amount": "Amount due"},
     )
     trend = style_chart(trend)
     st.plotly_chart(trend, use_container_width=True)
 
-    customer_col, product_col = st.columns(2)
+    provider_col, item_col = st.columns(2)
 
-    with customer_col:
-        st.subheader("Top Customers")
-        customer_chart = px.bar(
-            top_customers.sort_values("total_amount"),
+    with provider_col:
+        st.subheader("Top Providers")
+        provider_chart = px.bar(
+            top_providers.sort_values("total_amount"),
             x="total_amount",
-            y="customer",
+            y="proveedor",
             orientation="h",
-            labels={"total_amount": "Total amount", "customer": "Customer"},
+            labels={"total_amount": "Amount due", "proveedor": "Provider"},
         )
-        customer_chart = style_chart(customer_chart)
-        st.plotly_chart(customer_chart, use_container_width=True)
+        provider_chart = style_chart(provider_chart)
+        st.plotly_chart(provider_chart, use_container_width=True)
 
-    with product_col:
-        st.subheader("Top Products")
-        product_chart = px.bar(
+    with item_col:
+        st.subheader("Top Purchased Items")
+        item_chart = px.bar(
             top_products.sort_values("total_amount"),
             x="total_amount",
-            y="product",
+            y="item",
             orientation="h",
-            labels={"total_amount": "Total amount", "product": "Product"},
+            labels={"total_amount": "Amount due", "item": "Item"},
         )
-        product_chart = style_chart(product_chart)
-        st.plotly_chart(product_chart, use_container_width=True)
+        item_chart = style_chart(item_chart)
+        st.plotly_chart(item_chart, use_container_width=True)
 
-    with st.expander("Monthly invoice data"):
+    with st.expander("Monthly payable data"):
         st.dataframe(monthly, use_container_width=True, hide_index=True)
 
     st.stop()
