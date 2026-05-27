@@ -1,3 +1,10 @@
+"""Database adapter for local and hosted Scry environments.
+
+The ETL writes through DuckDB-compatible connections for local DuckDB and
+MotherDuck. Snowflake support is kept for read/query paths as the project grows
+toward warehouse deployments.
+"""
+
 from contextlib import contextmanager
 import os
 from pathlib import Path
@@ -12,6 +19,8 @@ from src.config import get_database_config, get_duckdb_path
 
 @contextmanager
 def duckdb_connection(path: Path):
+    """Open a local DuckDB connection and close it after use."""
+
     path.parent.mkdir(parents=True, exist_ok=True)
     connection = duckdb.connect(str(path))
     try:
@@ -22,6 +31,8 @@ def duckdb_connection(path: Path):
 
 @contextmanager
 def motherduck_connection(config: dict):
+    """Open a MotherDuck connection using the token from Streamlit secrets."""
+
     token = config.get("token")
     database = config.get("database", "")
 
@@ -45,6 +56,8 @@ def motherduck_connection(config: dict):
 
 @contextmanager
 def analytics_connection():
+    """Return the active write-capable analytics connection."""
+
     config = get_database_config()
     engine = config.get("engine", "duckdb").lower()
 
@@ -62,6 +75,8 @@ def analytics_connection():
 
 
 def snowflake_url(config: dict) -> str:
+    """Build a SQLAlchemy Snowflake URL from app configuration."""
+
     required = ["account", "user", "password", "warehouse", "database", "schema"]
     missing = [key for key in required if not config.get(key)]
 
@@ -84,6 +99,8 @@ def snowflake_url(config: dict) -> str:
 
 
 def read_query(sql: str, params: dict | None = None) -> pd.DataFrame:
+    """Execute a query against the configured analytics engine."""
+
     config = get_database_config()
     engine = config.get("engine", "duckdb").lower()
 

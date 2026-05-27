@@ -1,3 +1,10 @@
+"""Data ingestion helpers for the Scry ETL pipeline.
+
+This module is responsible for accepting uploaded files, recognizing supported
+electronic document types, parsing them into line-level records, and writing the
+raw staging tables used by the downstream transformations.
+"""
+
 import re
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass
@@ -19,12 +26,16 @@ ELECTRONIC_DOCUMENT_TYPES = {
 
 @dataclass(frozen=True)
 class InvoiceLoadResult:
+    """Summary returned after loading invoice-like documents into a table."""
+
     total_rows_uploaded: int
     duplicate_rows_removed: int
     final_rows_loaded: int
 
 
 def validate_table_name(table_name: str) -> str:
+    """Validate a user-provided DuckDB table name before building SQL."""
+
     clean_name = table_name.strip()
 
     if not VALID_TABLE_NAME.fullmatch(clean_name):
@@ -34,11 +45,15 @@ def validate_table_name(table_name: str) -> str:
 
 
 def quote_identifier(identifier: str) -> str:
+    """Return a safely quoted SQL identifier after validating its shape."""
+
     validate_table_name(identifier)
     return f'"{identifier}"'
 
 
 def load_dataset(source_path: Path, table_name: str, replace: bool = True) -> int:
+    """Load a local CSV or Parquet file into a DuckDB-compatible table."""
+
     if not source_path.exists():
         raise FileNotFoundError(f"Dataset not found: {source_path}")
 
@@ -63,6 +78,14 @@ def load_dataset(source_path: Path, table_name: str, replace: bool = True) -> in
 
 
 def deduplicate_invoice_lines(frame: pd.DataFrame) -> tuple[pd.DataFrame, int]:
+    """Remove repeated invoice lines using NumeroConsecutivo + NumeroLinea.
+
+    A valid invoice can have many rows with the same NumeroConsecutivo as long
+    as each row has a different NumeroLinea. Only later duplicate pairs are
+    removed; rows missing both key fields are kept because they cannot be
+    safely compared.
+    """
+
     required_columns = ["NumeroConsecutivo", "NumeroLinea"]
     missing_columns = [column for column in required_columns if column not in frame.columns]
 
@@ -98,6 +121,8 @@ def deduplicate_invoice_lines(frame: pd.DataFrame) -> tuple[pd.DataFrame, int]:
 
 
 def load_invoice_csvs(source_paths: list[Path], table_name: str = "source_data", replace: bool = True) -> InvoiceLoadResult:
+    """Load pre-flattened invoice CSV exports into the invoice staging table."""
+
     if not source_paths:
         raise ValueError("Upload at least one invoice CSV.")
 
@@ -135,6 +160,13 @@ def load_invoice_csvs(source_paths: list[Path], table_name: str = "source_data",
 
 
 def parse_electronic_document_xml(xml_path: Path) -> list[dict]:
+    """Parse a supported Costa Rica electronic document into line records.
+
+    Supported business documents are invoices and credit notes. Hacienda
+    response envelopes are intentionally ignored because they do not contain
+    line-level payable data.
+    """
+
     try:
         tree = ET.parse(xml_path)
     except ET.ParseError:
@@ -235,6 +267,8 @@ def parse_electronic_document_xml(xml_path: Path) -> list[dict]:
 
 
 def parse_invoice_xml(xml_path: Path) -> list[dict]:
+    """Return only invoice rows from a supported electronic document XML."""
+
     return [
         row
         for row in parse_electronic_document_xml(xml_path)
@@ -243,6 +277,8 @@ def parse_invoice_xml(xml_path: Path) -> list[dict]:
 
 
 def parse_credit_note_xml(xml_path: Path) -> list[dict]:
+    """Return only credit-note rows from a supported electronic document XML."""
+
     return [
         row
         for row in parse_electronic_document_xml(xml_path)
@@ -251,6 +287,8 @@ def parse_credit_note_xml(xml_path: Path) -> list[dict]:
 
 
 def write_frame_to_table(frame: pd.DataFrame, table_name: str, replace: bool = True) -> int:
+    """Persist a pandas DataFrame as a DuckDB/MotherDuck table."""
+
     table_identifier = quote_identifier(table_name)
     create_mode = "or replace" if replace else ""
 
@@ -261,6 +299,12 @@ def write_frame_to_table(frame: pd.DataFrame, table_name: str, replace: bool = T
 
 
 def load_invoice_xmls(source_paths: list[Path], table_name: str = "source_data", replace: bool = True) -> InvoiceLoadResult:
+    """Load invoice XML files into `source_data`.
+
+    Mixed uploads are tolerated: non-invoice electronic documents are ignored by
+    the parser, and the function fails only if no invoice line items are found.
+    """
+
     if not source_paths:
         raise ValueError("Upload at least one invoice XML.")
 
@@ -291,6 +335,8 @@ def load_invoice_xmls(source_paths: list[Path], table_name: str = "source_data",
 
 
 def load_credit_note_xmls(source_paths: list[Path], table_name: str = "credit_notes", replace: bool = True) -> InvoiceLoadResult:
+    """Load credit-note XML files into the separate `credit_notes` table."""
+
     if not source_paths:
         raise ValueError("Upload at least one credit note XML.")
 
@@ -321,6 +367,8 @@ def load_credit_note_xmls(source_paths: list[Path], table_name: str = "credit_no
 
 
 def save_uploaded_file(uploaded_file) -> Path:
+    """Save a Streamlit upload to the local upload directory."""
+
     UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
     destination = UPLOAD_DIR / uploaded_file.name
 
@@ -331,10 +379,14 @@ def save_uploaded_file(uploaded_file) -> Path:
 
 
 def save_uploaded_files(uploaded_files) -> list[Path]:
+    """Save multiple Streamlit uploads and return their local paths."""
+
     return [save_uploaded_file(uploaded_file) for uploaded_file in uploaded_files]
 
 
 def list_tables() -> list[str]:
+    """List user-facing tables in the active DuckDB-compatible database."""
+
     try:
         with analytics_connection() as connection:
             rows = connection.execute(

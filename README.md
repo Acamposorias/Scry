@@ -1,10 +1,19 @@
-# Streamlit Warehouse Dashboard
+# Scry
 
-This project starts with DuckDB for local development and keeps the database layer ready for Snowflake.
+Scry is an ETL pipeline and Streamlit review app for client-specific purchasing, supplier, invoice, credit-note, and price data.
+
+The current MVP focus is data correctness:
+
+1. Upload/import data.
+2. Generate clean tables.
+3. Validate totals and duplicates.
+4. Produce Excel exports.
+
+After those outputs are trusted, the next product layer is dashboarding, price tracking, run history, and credit-note workflows.
 
 ## Environment
 
-Create a virtual environment:
+Create and activate a virtual environment:
 
 ```powershell
 py -m venv .venv
@@ -14,70 +23,15 @@ pip install -r requirements.txt
 
 If `py` is not available, install Python 3.11+ first.
 
-## Local DuckDB Setup
-
-Create local sample data:
-
-```powershell
-python scripts/seed_duckdb.py
-```
-
-Run the app:
+Run the app locally:
 
 ```powershell
 streamlit run app.py
 ```
 
-## Loading Your Own Dataset
+## Database Configuration
 
-In the app sidebar, use **Load Data** to upload a `.csv`, `.parquet`, or `.pq` file.
-
-Choose a DuckDB table name such as:
-
-```text
-orders
-customers
-daily_revenue
-```
-
-Table names can contain letters, numbers, and underscores, and must start with a letter or underscore. The upload replaces the table if it already exists.
-
-You can also load a file from PowerShell:
-
-```powershell
-python scripts/load_dataset.py data/my_dataset.csv --table my_table
-```
-
-For invoice batches, use **Upload invoice CSVs** in the sidebar. You can select multiple CSV files at once, then click **Generate source_data**. The app combines the CSVs into `source_data`, removes duplicate invoice lines with the same `NumeroConsecutivo` + `NumeroLinea`, and rebuilds the derived tables.
-
-For raw Costa Rica factura electronica XML files, use **Upload invoice XMLs** and click **Generate source_data from XML**. The app parses each XML into invoice line rows, removes duplicate invoice lines, loads `source_data`, and rebuilds the derived tables.
-
-## Building Derived Tables
-
-After loading data into `source_data`, click **Build derived tables** in the app sidebar.
-
-This creates:
-
-- `clean_invoice_lines`: cleaned, rounded, and deduplicated invoice line fields.
-- `price_history`: one row per product line with supplier, product, price, tax, and invoice date.
-- `latest_price_list`: the most recent price by supplier, product, unit, CABYS code, and tax rate.
-- `price_changes`: detected unit-price changes over time.
-
-You can also build them from PowerShell:
-
-```powershell
-python scripts/build_derived_tables.py
-```
-
-## Configuration
-
-Copy the example secrets file:
-
-```powershell
-Copy-Item .streamlit/secrets.example.toml .streamlit/secrets.toml
-```
-
-The default local config is:
+The app defaults to local DuckDB:
 
 ```toml
 [database]
@@ -94,29 +48,153 @@ database = "warehouse_dashboard"
 token = "your_motherduck_token"
 ```
 
-In MotherDuck, create a database named `warehouse_dashboard` or change the `database` value to match your database name. Generate the token from your MotherDuck account settings, then paste it into Streamlit Cloud under **Settings > Secrets** for the deployed app.
+DuckDB is pinned in `requirements.txt` because MotherDuck support can lag the newest DuckDB release.
 
-When you are ready for Snowflake, change the same file to:
+## App Workflow
 
-```toml
-[database]
-engine = "snowflake"
-account = "your_account"
-user = "your_user"
-password = "your_password"
-role = "your_role"
-warehouse = "your_warehouse"
-database = "your_database"
-schema = "PUBLIC"
+The sidebar has separate loaders for invoices and credit notes.
+
+Invoice load:
+
+1. Upload invoice XML files.
+2. Click `Generate source_data from XML`.
+3. The app writes invoice line records to `source_data`.
+4. Derived tables are rebuilt from `source_data`.
+
+Credit-note load:
+
+1. Upload credit-note XML files.
+2. Click `Generate credit_notes from XML`.
+3. The app writes credit-note line records to `credit_notes`.
+
+Credit notes are intentionally kept separate from invoices for now. Reconciliation and application against invoices is a future workflow.
+
+## Table Outputs
+
+`source_data`
+
+Raw invoice staging table. One row per invoice line.
+
+`credit_notes`
+
+Raw credit-note staging table. One row per credit-note line. Includes reference fields such as `Referencia_Numero`, `Referencia_FechaEmision`, and `Referencia_Razon`.
+
+`clean_invoice_lines`
+
+Full normalized invoice line table. It keeps the detailed fields needed by downstream transformations, including numeric casts, tax rates, currency, exchange rate, and CRC-converted amounts.
+
+`invoice_lines`
+
+Compact invoice-line review table with:
+
+- `numero_consecutivo`
+- `fecha_emision`
+- `mes_nombre`
+- `proveedor`
+- `receptor_nombre`
+- `codigo_moneda`
+- `tipo_cambio`
+
+`facturas_individuales`
+
+One row per invoice. This table follows the partner-specified grouping logic:
+
+- group by `NumeroConsecutivo`
+- keep `FechaEmision`
+- keep `Emisor_NombreComercial`
+- calculate `ITEMS 13%` from `SubTotal` where tax is 13%
+- calculate `ITEMS 1%` from `SubTotal` where tax is 1%
+- calculate discount fields from `MontoTotal - SubTotal`
+- calculate IVA fields from `ImpuestoNeto`
+- calculate `SUBTOTAL` from `MontoTotalLinea`
+
+`invoice_summary`
+
+Excel-oriented payment review table. It groups invoice lines by invoice and includes provider, invoice number, rubro, tax buckets, discounts, totals, and final amount.
+
+`price_history`
+
+Line-level product purchase history used for price tracking.
+
+`latest_price_list`
+
+Most recent price by provider/product/tax grouping. Current exported fields are:
+
+- `proveedor`
+- `detalle`
+- `precio_unitario`
+- `impuesto_tarifa`
+- `ultima_fecha_emision`
+- `ultimo_numero_consecutivo`
+
+`price_changes`
+
+Detected unit-price changes over time.
+
+## Business Rules
+
+Duplicate invoice lines:
+
+- The unique invoice-line key is `NumeroConsecutivo + NumeroLinea`.
+- Keep the first row for each pair.
+- Remove later repeated pairs.
+- Rows missing both key fields are kept because they cannot be safely deduplicated.
+
+Invoice rollups:
+
+- `NumeroConsecutivo` identifies an invoice.
+- `NumeroLinea` identifies each item line in that invoice.
+- `facturas_individuales` generates one row per `NumeroConsecutivo`.
+
+Currency:
+
+- Each line keeps original amounts.
+- CRC-converted fields are calculated with `TipoCambio`.
+- If old `source_data` does not have currency fields, the build defaults to `CRC` and exchange rate `1`.
+
+Credit notes:
+
+- `NotaCreditoElectronica` documents are parsed separately into `credit_notes`.
+- Hacienda response XMLs are ignored.
+- Credit notes are not yet applied against payable totals.
+
+## Project Shape
+
+- `app.py`: Streamlit UI, table preview, Excel export, and dashboard.
+- `src/ingest.py`: file upload handling, XML parsing, table loading, deduplication.
+- `src/derived_tables.py`: SQL transformations and derived table generation.
+- `src/data.py`: dashboard-facing query helpers.
+- `src/db.py`: local DuckDB, MotherDuck, and Snowflake query adapters.
+- `src/config.py`: Streamlit secrets and local database defaults.
+- `scripts/`: local utility scripts.
+- `data/`: local DuckDB files and uploads, ignored by git.
+
+## Useful Commands
+
+Build derived tables from PowerShell:
+
+```powershell
+python scripts/build_derived_tables.py
 ```
 
-## Suggested Project Shape
+Inspect local DuckDB:
 
-- `app.py`: Streamlit UI.
-- `src/data.py`: dashboard-facing data functions.
-- `src/db.py`: database engine adapter.
-- `src/config.py`: Streamlit secrets handling.
-- `scripts/seed_duckdb.py`: local development seed data.
-- `data/`: local DuckDB files, ignored by git.
+```powershell
+python scripts/inspect_duckdb.py
+```
 
-Keep SQL in `src/data.py` or move it into views/dbt models as the project grows. The main goal is to keep Streamlit UI code separate from warehouse access.
+Run a compile check:
+
+```powershell
+python -m compileall app.py src
+```
+
+## MVP Gaps
+
+Important remaining MVP work:
+
+- validation reports for totals, duplicates, missing fields, and out-of-period invoices
+- credit-note reconciliation against original invoices
+- run history for each pipeline execution
+- client-specific configuration for mappings and output rules
+- user-friendly error reports instead of raw tracebacks

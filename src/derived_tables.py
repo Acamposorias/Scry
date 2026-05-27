@@ -1,3 +1,10 @@
+"""Derived-table builder for the Scry invoice ETL pipeline.
+
+`source_data` is the raw invoice staging table. This module turns it into
+business-facing tables for line inspection, invoice rollups, payment summaries,
+latest provider prices, and price-change detection.
+"""
+
 from src.db import analytics_connection
 
 
@@ -13,6 +20,19 @@ DERIVED_TABLES = [
 
 
 def build_derived_tables() -> dict[str, int]:
+    """Rebuild every derived table from the current `source_data` table.
+
+    The transformation keeps `clean_invoice_lines` as the full normalized
+    line-level table. Additional outputs serve narrower business purposes:
+
+    - `invoice_lines`: compact line table for quick invoice identity review.
+    - `facturas_individuales`: one row per invoice using the partner-specified
+      grouping logic.
+    - `invoice_summary`: payment-review table shaped for Excel exports.
+    - `price_history`, `latest_price_list`, `price_changes`: purchasing and
+      provider price intelligence tables.
+    """
+
     with analytics_connection() as connection:
         source_exists = connection.execute(
             """
