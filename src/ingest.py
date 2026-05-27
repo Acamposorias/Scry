@@ -371,6 +371,11 @@ def save_uploaded_file(uploaded_file) -> Path:
 
     UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
     destination = UPLOAD_DIR / uploaded_file.name
+    counter = 1
+
+    while destination.exists():
+        destination = UPLOAD_DIR / f"{Path(uploaded_file.name).stem}__{counter}{Path(uploaded_file.name).suffix}"
+        counter += 1
 
     with destination.open("wb") as file:
         file.write(uploaded_file.getbuffer())
