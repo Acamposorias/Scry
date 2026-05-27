@@ -68,6 +68,7 @@ from src.data import (
     load_invoice_metrics,
     load_invoice_monthly,
     load_provider_overview,
+    load_provider_product_prices,
     load_top_providers,
     load_top_products,
 )
@@ -382,6 +383,50 @@ if has_table("providers") and has_table("provider_invoices") and has_table("prov
                     "last_seen_at": "Last seen",
                 },
             )
+
+        provider_options = provider_overview.assign(
+            provider_label=lambda frame: frame["provider_name"].fillna("Unknown provider")
+            + " | "
+            + frame["provider_id"].fillna("no-id")
+        )
+        selected_provider_label = st.selectbox(
+            "Provider product detail",
+            provider_options["provider_label"],
+        )
+        selected_provider_id = provider_options.loc[
+            provider_options["provider_label"] == selected_provider_label,
+            "provider_id",
+        ].iloc[0]
+        selected_provider_products = load_provider_product_prices(selected_provider_id)
+
+        with st.expander("Selected provider products and prices", expanded=True):
+            if selected_provider_products.empty:
+                st.info("No products found for this provider.")
+            else:
+                st.dataframe(
+                    selected_provider_products,
+                    use_container_width=True,
+                    hide_index=True,
+                    column_config={
+                        "product": "Product",
+                        "codigo_cabys": "CABYS",
+                        "unidad_medida": "Unit",
+                        "impuesto_tarifa": st.column_config.NumberColumn("Tax rate", format="%.0f%%"),
+                        "latest_price": st.column_config.NumberColumn("Latest price", format="$%.2f"),
+                        "latest_invoice_date": "Latest invoice date",
+                        "latest_invoice": "Latest invoice",
+                        "purchase_line_count": "Lines",
+                        "total_quantity": st.column_config.NumberColumn("Total quantity", format="%.2f"),
+                        "total_spend_crc": st.column_config.NumberColumn("Total spend", format="$%.0f"),
+                    },
+                )
+                st.download_button(
+                    "Download provider products",
+                    data=table_to_excel_bytes(selected_provider_products, "provider_products"),
+                    file_name=f"{selected_provider_id}_products.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    use_container_width=True,
+                )
 
 if has_table("clean_invoice_lines"):
     metrics = load_invoice_metrics().iloc[0]

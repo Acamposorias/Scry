@@ -158,3 +158,63 @@ def load_provider_overview() -> pd.DataFrame:
         order by pending_amount_crc desc nulls last, provider_name
         """
     )
+
+
+@st.cache_data(ttl=600)
+def load_provider_product_prices(provider_id: str) -> pd.DataFrame:
+    """Load product-level price details for one provider."""
+
+    return read_query(
+        """
+        with ranked_prices as (
+            select
+                coalesce(
+                    nullif(emisor_identificacion, ''),
+                    lower(regexp_replace(proveedor, '[^A-Za-z0-9]+', '_', 'g'))
+                ) as provider_id,
+                proveedor,
+                detalle,
+                codigo_cabys,
+                unidad_medida,
+                impuesto_tarifa,
+                precio_unitario,
+                fecha_emision,
+                numero_consecutivo,
+                row_number() over (
+                    partition by
+                        coalesce(
+                            nullif(emisor_identificacion, ''),
+                            lower(regexp_replace(proveedor, '[^A-Za-z0-9]+', '_', 'g'))
+                        ),
+                        detalle,
+                        codigo_cabys,
+                        unidad_medida,
+                        impuesto_tarifa
+                    order by fecha_emision desc, numero_consecutivo desc, numero_linea desc
+                ) as row_rank
+            from price_history
+        )
+        select
+            provider_products.detalle as product,
+            provider_products.codigo_cabys,
+            provider_products.unidad_medida,
+            provider_products.impuesto_tarifa,
+            ranked_prices.precio_unitario as latest_price,
+            ranked_prices.fecha_emision as latest_invoice_date,
+            ranked_prices.numero_consecutivo as latest_invoice,
+            provider_products.purchase_line_count,
+            provider_products.total_quantity,
+            provider_products.total_spend_crc
+        from provider_products
+        left join ranked_prices
+            on provider_products.provider_id = ranked_prices.provider_id
+           and provider_products.detalle = ranked_prices.detalle
+           and coalesce(provider_products.codigo_cabys, '') = coalesce(ranked_prices.codigo_cabys, '')
+           and coalesce(provider_products.unidad_medida, '') = coalesce(ranked_prices.unidad_medida, '')
+           and coalesce(provider_products.impuesto_tarifa, -1) = coalesce(ranked_prices.impuesto_tarifa, -1)
+           and ranked_prices.row_rank = 1
+        where provider_products.provider_id = $provider_id
+        order by provider_products.total_spend_crc desc nulls last, provider_products.detalle
+        """,
+        {"provider_id": provider_id},
+    )
