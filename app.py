@@ -293,7 +293,7 @@ with st.sidebar:
     tables = list_tables()
 
 if tables:
-    with st.expander("Table preview", expanded=True):
+    with st.expander("Table preview", expanded=False):
         selected_table = st.selectbox("Table", tables, key="table_preview")
         preview_limit = st.number_input(
             "Preview rows",
@@ -364,7 +364,7 @@ if has_table("providers") and has_table("provider_invoices") and has_table("prov
             provider_product_chart = style_chart(provider_product_chart)
             st.plotly_chart(provider_product_chart, use_container_width=True)
 
-        with st.expander("Provider detail", expanded=True):
+        with st.expander("Provider detail", expanded=False):
             st.dataframe(
                 provider_overview,
                 use_container_width=True,
@@ -399,7 +399,7 @@ if has_table("providers") and has_table("provider_invoices") and has_table("prov
         ].iloc[0]
         selected_provider_products = load_provider_product_prices(selected_provider_id)
 
-        with st.expander("Selected provider products and prices", expanded=True):
+        with st.expander("Selected provider products and prices", expanded=False):
             if selected_provider_products.empty:
                 st.info("No products found for this provider.")
             else:
@@ -477,7 +477,7 @@ if has_table("clean_invoice_lines"):
         item_chart = style_chart(item_chart)
         st.plotly_chart(item_chart, use_container_width=True)
 
-    with st.expander("Monthly payable data"):
+    with st.expander("Monthly payable data", expanded=False):
         st.dataframe(monthly, use_container_width=True, hide_index=True)
 
     st.stop()
