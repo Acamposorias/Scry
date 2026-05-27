@@ -14,7 +14,6 @@ DERIVED_TABLES = [
     "provider_products",
     "provider_credit_notes",
     "clean_invoice_lines",
-    "invoice_lines",
     "facturas_individuales",
     "invoice_summary",
     "price_history",
@@ -29,7 +28,6 @@ def build_derived_tables() -> dict[str, int]:
     The transformation keeps `clean_invoice_lines` as the full normalized
     line-level table. Additional outputs serve narrower business purposes:
 
-    - `invoice_lines`: compact line table for quick invoice identity review.
     - `facturas_individuales`: one row per invoice using the partner-specified
       grouping logic.
     - `invoice_summary`: payment-review table shaped for Excel exports.
@@ -143,36 +141,6 @@ def build_derived_tables() -> dict[str, int]:
                 round(impuesto_monto * tipo_cambio, 2) as impuesto_monto_crc,
                 round(descuento_estimado * tipo_cambio, 2) as descuento_estimado_crc
             from typed_lines
-            """
-        )
-
-        connection.execute(
-            """
-            create or replace table invoice_lines as
-            select
-                numero_consecutivo,
-                fecha_emision,
-                case extract(month from fecha_emision)
-                    when 1 then 'Enero'
-                    when 2 then 'Febrero'
-                    when 3 then 'Marzo'
-                    when 4 then 'Abril'
-                    when 5 then 'Mayo'
-                    when 6 then 'Junio'
-                    when 7 then 'Julio'
-                    when 8 then 'Agosto'
-                    when 9 then 'Septiembre'
-                    when 10 then 'Octubre'
-                    when 11 then 'Noviembre'
-                    when 12 then 'Diciembre'
-                    else null
-                end as mes_nombre,
-                proveedor,
-                receptor_nombre,
-                codigo_moneda,
-                tipo_cambio
-            from clean_invoice_lines
-            order by fecha_emision, proveedor, numero_consecutivo
             """
         )
 

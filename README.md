@@ -99,18 +99,6 @@ Associates purchased products to providers. One row per provider/product/tax gro
 
 Associates credit notes to providers. One row per provider/credit-note document with reference invoice data, reason, amount, and line count. This table is empty if no credit notes have been loaded.
 
-`invoice_lines`
-
-Compact invoice-line review table with:
-
-- `numero_consecutivo`
-- `fecha_emision`
-- `mes_nombre`
-- `proveedor`
-- `receptor_nombre`
-- `codigo_moneda`
-- `tipo_cambio`
-
 `facturas_individuales`
 
 One row per invoice. This table follows the partner-specified grouping logic:
