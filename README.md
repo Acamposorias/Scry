@@ -83,6 +83,22 @@ Raw credit-note staging table. One row per credit-note line. Includes reference 
 
 Full normalized invoice line table. It keeps the detailed fields needed by downstream transformations, including numeric casts, tax rates, currency, exchange rate, and CRC-converted amounts.
 
+`providers`
+
+Provider dimension table. It extracts providers from invoices and credit notes, creating one provider record per provider ID. The provider ID uses the provider identification number when available, and falls back to a normalized provider name when identification is missing.
+
+`provider_invoices`
+
+Associates invoices to providers. One row per provider/invoice with invoice date, receiver, currency, exchange rate, total CRC amount, and line count.
+
+`provider_products`
+
+Associates purchased products to providers. One row per provider/product/tax grouping with first seen date, last seen date, line count, total quantity, and total spend.
+
+`provider_credit_notes`
+
+Associates credit notes to providers. One row per provider/credit-note document with reference invoice data, reason, amount, and line count. This table is empty if no credit notes have been loaded.
+
 `invoice_lines`
 
 Compact invoice-line review table with:
@@ -157,6 +173,13 @@ Credit notes:
 - `NotaCreditoElectronica` documents are parsed separately into `credit_notes`.
 - Hacienda response XMLs are ignored.
 - Credit notes are not yet applied against payable totals.
+
+Providers:
+
+- Providers are extracted from both invoices and credit notes.
+- Provider identity prefers `Emisor_Identificacion`.
+- If identification is missing, the fallback provider ID is a normalized provider name.
+- Provider association tables link providers to invoices, products, and credit notes without changing the raw source tables.
 
 ## Project Shape
 

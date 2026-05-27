@@ -67,6 +67,7 @@ from src.data import (
     has_table,
     load_invoice_metrics,
     load_invoice_monthly,
+    load_provider_overview,
     load_top_providers,
     load_top_products,
 )
@@ -316,6 +317,71 @@ if tables:
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             use_container_width=True,
         )
+
+if has_table("providers") and has_table("provider_invoices") and has_table("provider_products"):
+    provider_overview = load_provider_overview()
+
+    if not provider_overview.empty:
+        st.subheader("Provider Dashboard")
+
+        provider_metric_cols = st.columns(4)
+        provider_metric_cols[0].metric("Providers", f"{len(provider_overview):,.0f}")
+        provider_metric_cols[1].metric("Pending invoices", f"{provider_overview['pending_invoices'].sum():,.0f}")
+        provider_metric_cols[2].metric("Products tracked", f"{provider_overview['product_count'].sum():,.0f}")
+        provider_metric_cols[3].metric("Pending amount", f"${provider_overview['pending_amount_crc'].sum():,.0f}")
+
+        amount_col, products_col = st.columns(2)
+        top_provider_overview = provider_overview.head(12)
+
+        with amount_col:
+            st.subheader("Pending Amount by Provider")
+            provider_amount_chart = px.bar(
+                top_provider_overview.sort_values("pending_amount_crc"),
+                x="pending_amount_crc",
+                y="provider_name",
+                orientation="h",
+                labels={
+                    "pending_amount_crc": "Pending amount",
+                    "provider_name": "Provider",
+                },
+            )
+            provider_amount_chart = style_chart(provider_amount_chart)
+            st.plotly_chart(provider_amount_chart, use_container_width=True)
+
+        with products_col:
+            st.subheader("Products by Provider")
+            provider_product_chart = px.bar(
+                provider_overview.sort_values("product_count", ascending=False).head(12).sort_values("product_count"),
+                x="product_count",
+                y="provider_name",
+                orientation="h",
+                labels={
+                    "product_count": "Products",
+                    "provider_name": "Provider",
+                },
+            )
+            provider_product_chart = style_chart(provider_product_chart)
+            st.plotly_chart(provider_product_chart, use_container_width=True)
+
+        with st.expander("Provider detail", expanded=True):
+            st.dataframe(
+                provider_overview,
+                use_container_width=True,
+                hide_index=True,
+                column_config={
+                    "provider_id": "Provider ID",
+                    "provider_name": "Provider",
+                    "legal_name": "Legal name",
+                    "provider_identification": "Identification",
+                    "pending_invoices": "Pending invoices",
+                    "pending_amount_crc": st.column_config.NumberColumn("Pending amount", format="$%.0f"),
+                    "product_count": "Products",
+                    "credit_note_count": "Credit notes",
+                    "credit_note_amount_crc": st.column_config.NumberColumn("Credit note amount", format="$%.0f"),
+                    "first_seen_at": "First seen",
+                    "last_seen_at": "Last seen",
+                },
+            )
 
 if has_table("clean_invoice_lines"):
     metrics = load_invoice_metrics().iloc[0]

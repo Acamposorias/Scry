@@ -9,6 +9,10 @@ from src.db import analytics_connection
 
 
 DERIVED_TABLES = [
+    "providers",
+    "provider_invoices",
+    "provider_products",
+    "provider_credit_notes",
     "clean_invoice_lines",
     "invoice_lines",
     "facturas_individuales",
@@ -29,6 +33,8 @@ def build_derived_tables() -> dict[str, int]:
     - `facturas_individuales`: one row per invoice using the partner-specified
       grouping logic.
     - `invoice_summary`: payment-review table shaped for Excel exports.
+    - `providers` and provider association tables: supplier dimension and
+      links to invoices, products, and credit notes.
     - `price_history`, `latest_price_list`, `price_changes`: purchasing and
       provider price intelligence tables.
     """
@@ -166,6 +172,191 @@ def build_derived_tables() -> dict[str, int]:
                 codigo_moneda,
                 tipo_cambio
             from clean_invoice_lines
+            order by fecha_emision, proveedor, numero_consecutivo
+            """
+        )
+
+        credit_notes_exists = connection.execute(
+            """
+            select count(*)
+            from information_schema.tables
+            where table_schema = 'main'
+              and table_name = 'credit_notes'
+            """
+        ).fetchone()[0]
+
+        if credit_notes_exists:
+            connection.execute(
+                """
+                create or replace temporary table clean_credit_note_lines as
+                select
+                    SourceFile as source_file,
+                    trim(cast(NumeroConsecutivo as varchar)) as numero_consecutivo,
+                    try_cast(FechaEmision as timestamp) as fecha_emision,
+                    cast(try_cast(FechaEmision as timestamp) as date) as fecha,
+                    Emisor_Nombre as emisor_nombre,
+                    coalesce(nullif(Emisor_NombreComercial, ''), Emisor_Nombre) as proveedor,
+                    cast(Emisor_Identificacion as varchar) as emisor_identificacion,
+                    Receptor_Nombre as receptor_nombre,
+                    cast(Receptor_Identificacion as varchar) as receptor_identificacion,
+                    coalesce(nullif(upper(trim(cast(CodigoMoneda as varchar))), ''), 'CRC') as codigo_moneda,
+                    coalesce(nullif(try_cast(TipoCambio as double), 0), 1) as tipo_cambio,
+                    Referencia_Numero as referencia_numero,
+                    try_cast(Referencia_FechaEmision as timestamp) as referencia_fecha_emision,
+                    Referencia_Codigo as referencia_codigo,
+                    Referencia_Razon as referencia_razon,
+                    trim(cast(NumeroLinea as varchar)) as numero_linea,
+                    CodigoCABYS as codigo_cabys,
+                    Detalle as detalle,
+                    UnidadMedida as unidad_medida,
+                    round(try_cast(Cantidad as double), 2) as cantidad,
+                    round(try_cast(PrecioUnitario as double), 2) as precio_unitario,
+                    round(try_cast(SubTotal as double), 2) as subtotal,
+                    round(try_cast(ImpuestoNeto as double), 2) as impuesto_neto,
+                    round(try_cast(MontoTotalLinea as double), 2) as monto_total_linea,
+                    round(try_cast(Impuesto_Tarifa as double), 2) as impuesto_tarifa,
+                    round(try_cast(Impuesto_Monto as double), 2) as impuesto_monto,
+                    round(try_cast(MontoTotalLinea as double) * coalesce(nullif(try_cast(TipoCambio as double), 0), 1), 2) as monto_total_linea_crc
+                from credit_notes
+                """
+            )
+        else:
+            connection.execute(
+                """
+                create or replace temporary table clean_credit_note_lines as
+                select
+                    cast(null as varchar) as source_file,
+                    cast(null as varchar) as numero_consecutivo,
+                    cast(null as timestamp) as fecha_emision,
+                    cast(null as date) as fecha,
+                    cast(null as varchar) as emisor_nombre,
+                    cast(null as varchar) as proveedor,
+                    cast(null as varchar) as emisor_identificacion,
+                    cast(null as varchar) as receptor_nombre,
+                    cast(null as varchar) as receptor_identificacion,
+                    cast(null as varchar) as codigo_moneda,
+                    cast(null as double) as tipo_cambio,
+                    cast(null as varchar) as referencia_numero,
+                    cast(null as timestamp) as referencia_fecha_emision,
+                    cast(null as varchar) as referencia_codigo,
+                    cast(null as varchar) as referencia_razon,
+                    cast(null as varchar) as numero_linea,
+                    cast(null as varchar) as codigo_cabys,
+                    cast(null as varchar) as detalle,
+                    cast(null as varchar) as unidad_medida,
+                    cast(null as double) as cantidad,
+                    cast(null as double) as precio_unitario,
+                    cast(null as double) as subtotal,
+                    cast(null as double) as impuesto_neto,
+                    cast(null as double) as monto_total_linea,
+                    cast(null as double) as impuesto_tarifa,
+                    cast(null as double) as impuesto_monto,
+                    cast(null as double) as monto_total_linea_crc
+                where false
+                """
+            )
+
+        connection.execute(
+            """
+            create or replace table providers as
+            with provider_events as (
+                select
+                    coalesce(nullif(emisor_identificacion, ''), lower(regexp_replace(proveedor, '[^A-Za-z0-9]+', '_', 'g'))) as provider_id,
+                    nullif(emisor_identificacion, '') as provider_identification,
+                    proveedor as provider_name,
+                    emisor_nombre as legal_name,
+                    fecha_emision,
+                    'invoice' as source_type,
+                    numero_consecutivo as document_number
+                from clean_invoice_lines
+                where coalesce(nullif(emisor_identificacion, ''), nullif(proveedor, '')) is not null
+
+                union all
+
+                select
+                    coalesce(nullif(emisor_identificacion, ''), lower(regexp_replace(proveedor, '[^A-Za-z0-9]+', '_', 'g'))) as provider_id,
+                    nullif(emisor_identificacion, '') as provider_identification,
+                    proveedor as provider_name,
+                    emisor_nombre as legal_name,
+                    fecha_emision,
+                    'credit_note' as source_type,
+                    numero_consecutivo as document_number
+                from clean_credit_note_lines
+                where coalesce(nullif(emisor_identificacion, ''), nullif(proveedor, '')) is not null
+            )
+            select
+                provider_id,
+                any_value(provider_identification) as provider_identification,
+                any_value(provider_name) as provider_name,
+                any_value(legal_name) as legal_name,
+                min(fecha_emision) as first_seen_at,
+                max(fecha_emision) as last_seen_at,
+                count(distinct case when source_type = 'invoice' then document_number end) as invoice_count,
+                count(distinct case when source_type = 'credit_note' then document_number end) as credit_note_count
+            from provider_events
+            group by provider_id
+            order by provider_name
+            """
+        )
+
+        connection.execute(
+            """
+            create or replace table provider_invoices as
+            select
+                coalesce(nullif(emisor_identificacion, ''), lower(regexp_replace(proveedor, '[^A-Za-z0-9]+', '_', 'g'))) as provider_id,
+                numero_consecutivo,
+                min(fecha_emision) as fecha_emision,
+                any_value(proveedor) as proveedor,
+                any_value(receptor_nombre) as receptor_nombre,
+                any_value(codigo_moneda) as codigo_moneda,
+                any_value(tipo_cambio) as tipo_cambio,
+                round(sum(coalesce(monto_total_linea_crc, 0)), 2) as invoice_total_crc,
+                count(*) as line_count
+            from clean_invoice_lines
+            group by provider_id, numero_consecutivo
+            order by fecha_emision, proveedor, numero_consecutivo
+            """
+        )
+
+        connection.execute(
+            """
+            create or replace table provider_products as
+            select
+                coalesce(nullif(emisor_identificacion, ''), lower(regexp_replace(proveedor, '[^A-Za-z0-9]+', '_', 'g'))) as provider_id,
+                any_value(proveedor) as proveedor,
+                detalle,
+                codigo_cabys,
+                unidad_medida,
+                impuesto_tarifa,
+                min(fecha_emision) as first_seen_at,
+                max(fecha_emision) as last_seen_at,
+                count(*) as purchase_line_count,
+                round(sum(coalesce(cantidad, 0)), 2) as total_quantity,
+                round(sum(coalesce(monto_total_linea_crc, 0)), 2) as total_spend_crc
+            from clean_invoice_lines
+            where detalle is not null
+            group by provider_id, detalle, codigo_cabys, unidad_medida, impuesto_tarifa
+            order by proveedor, detalle
+            """
+        )
+
+        connection.execute(
+            """
+            create or replace table provider_credit_notes as
+            select
+                coalesce(nullif(emisor_identificacion, ''), lower(regexp_replace(proveedor, '[^A-Za-z0-9]+', '_', 'g'))) as provider_id,
+                numero_consecutivo,
+                min(fecha_emision) as fecha_emision,
+                any_value(proveedor) as proveedor,
+                any_value(receptor_nombre) as receptor_nombre,
+                any_value(referencia_numero) as referencia_numero,
+                any_value(referencia_fecha_emision) as referencia_fecha_emision,
+                any_value(referencia_codigo) as referencia_codigo,
+                any_value(referencia_razon) as referencia_razon,
+                round(sum(coalesce(monto_total_linea_crc, 0)), 2) as credit_note_total_crc,
+                count(*) as line_count
+            from clean_credit_note_lines
+            group by provider_id, numero_consecutivo
             order by fecha_emision, proveedor, numero_consecutivo
             """
         )

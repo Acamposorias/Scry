@@ -105,3 +105,56 @@ def load_top_products(limit: int = 15) -> pd.DataFrame:
         """,
         {"limit": limit},
     )
+
+
+@st.cache_data(ttl=600)
+def load_provider_overview() -> pd.DataFrame:
+    """Load provider-level invoice, product, and credit-note status."""
+
+    return read_query(
+        """
+        with invoice_totals as (
+            select
+                provider_id,
+                count(*) as pending_invoices,
+                sum(invoice_total_crc) as pending_amount_crc
+            from provider_invoices
+            group by 1
+        ),
+        product_totals as (
+            select
+                provider_id,
+                count(*) as product_count
+            from provider_products
+            group by 1
+        ),
+        credit_note_totals as (
+            select
+                provider_id,
+                count(*) as credit_note_count,
+                sum(credit_note_total_crc) as credit_note_amount_crc
+            from provider_credit_notes
+            group by 1
+        )
+        select
+            providers.provider_id,
+            providers.provider_name,
+            providers.legal_name,
+            providers.provider_identification,
+            coalesce(invoice_totals.pending_invoices, 0) as pending_invoices,
+            coalesce(invoice_totals.pending_amount_crc, 0) as pending_amount_crc,
+            coalesce(product_totals.product_count, 0) as product_count,
+            coalesce(credit_note_totals.credit_note_count, 0) as credit_note_count,
+            coalesce(credit_note_totals.credit_note_amount_crc, 0) as credit_note_amount_crc,
+            providers.first_seen_at,
+            providers.last_seen_at
+        from providers
+        left join invoice_totals
+            on providers.provider_id = invoice_totals.provider_id
+        left join product_totals
+            on providers.provider_id = product_totals.provider_id
+        left join credit_note_totals
+            on providers.provider_id = credit_note_totals.provider_id
+        order by pending_amount_crc desc nulls last, provider_name
+        """
+    )
