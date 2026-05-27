@@ -65,12 +65,9 @@ def table_to_excel_bytes(table, sheet_name: str) -> bytes:
 
 from src.data import (
     has_table,
-    load_invoice_metrics,
     load_invoice_monthly,
     load_provider_overview,
     load_provider_product_prices,
-    load_top_providers,
-    load_top_products,
 )
 from src.db import read_query
 from src.derived_tables import build_derived_tables
@@ -429,16 +426,7 @@ if has_table("providers") and has_table("provider_invoices") and has_table("prov
                 )
 
 if has_table("clean_invoice_lines"):
-    metrics = load_invoice_metrics().iloc[0]
     monthly = load_invoice_monthly()
-    top_providers = load_top_providers()
-    top_products = load_top_products()
-
-    metric_cols = st.columns(4)
-    metric_cols[0].metric("Amount due", f"${metrics['total_amount']:,.0f}")
-    metric_cols[1].metric("Invoices to pay", f"{metrics['invoices']:,.0f}")
-    metric_cols[2].metric("Providers", f"{metrics['providers']:,.0f}")
-    metric_cols[3].metric("Line items", f"{metrics['line_items']:,.0f}")
 
     st.subheader("Monthly Payables")
     trend = px.line(
@@ -450,32 +438,6 @@ if has_table("clean_invoice_lines"):
     )
     trend = style_chart(trend)
     st.plotly_chart(trend, use_container_width=True)
-
-    provider_col, item_col = st.columns(2)
-
-    with provider_col:
-        st.subheader("Top Providers")
-        provider_chart = px.bar(
-            top_providers.sort_values("total_amount"),
-            x="total_amount",
-            y="proveedor",
-            orientation="h",
-            labels={"total_amount": "Amount due", "proveedor": "Provider"},
-        )
-        provider_chart = style_chart(provider_chart)
-        st.plotly_chart(provider_chart, use_container_width=True)
-
-    with item_col:
-        st.subheader("Top Purchased Items")
-        item_chart = px.bar(
-            top_products.sort_values("total_amount"),
-            x="total_amount",
-            y="item",
-            orientation="h",
-            labels={"total_amount": "Amount due", "item": "Item"},
-        )
-        item_chart = style_chart(item_chart)
-        st.plotly_chart(item_chart, use_container_width=True)
 
     with st.expander("Monthly payable data", expanded=False):
         st.dataframe(monthly, use_container_width=True, hide_index=True)
