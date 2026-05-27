@@ -336,60 +336,6 @@ def build_derived_tables() -> dict[str, int]:
                 numero_consecutivo as "NumeroConsecutivo",
                 min(fecha_emision) as "FechaEmision",
                 any_value(proveedor) as "Emisor_NombreComercial",
-                round(
-                    sum(
-                        case
-                            when impuesto_tarifa = 13 then coalesce(subtotal_crc, 0)
-                            else 0
-                        end
-                    ),
-                    2
-                ) as "ITEMS 13%",
-                round(
-                    sum(
-                        case
-                            when impuesto_tarifa = 1 then coalesce(subtotal_crc, 0)
-                            else 0
-                        end
-                    ),
-                    2
-                ) as "ITEMS 1%",
-                round(
-                    sum(
-                        case
-                            when impuesto_tarifa = 13 then coalesce(descuento_estimado_crc, 0)
-                            else 0
-                        end
-                    ),
-                    2
-                ) as "DESCUENTO 13%",
-                round(
-                    sum(
-                        case
-                            when impuesto_tarifa = 1 then coalesce(descuento_estimado_crc, 0)
-                            else 0
-                        end
-                    ),
-                    2
-                ) as "DESCUENTO 1%",
-                round(
-                    sum(
-                        case
-                            when impuesto_tarifa = 13 then coalesce(impuesto_neto_crc, 0)
-                            else 0
-                        end
-                    ),
-                    2
-                ) as "IVA 13%",
-                round(
-                    sum(
-                        case
-                            when impuesto_tarifa = 1 then coalesce(impuesto_neto_crc, 0)
-                            else 0
-                        end
-                    ),
-                    2
-                ) as "IVA 1%",
                 round(sum(coalesce(monto_total_linea_crc, 0)), 2) as "SUBTOTAL"
             from clean_invoice_lines
             group by numero_consecutivo
@@ -546,9 +492,7 @@ def build_derived_tables() -> dict[str, int]:
             )
             select
                 proveedor,
-                codigo_cabys,
                 detalle,
-                unidad_medida,
                 impuesto_tarifa,
                 fecha_anterior,
                 fecha_emision,
@@ -562,9 +506,7 @@ def build_derived_tables() -> dict[str, int]:
                     end,
                     2
                 ) as cambio_porcentaje,
-                numero_consecutivo,
-                numero_linea,
-                source_file
+                numero_consecutivo
             from sequenced
             where precio_anterior is not null
               and precio_unitario <> precio_anterior

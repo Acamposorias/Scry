@@ -159,6 +159,7 @@ PREVIEW_TABLES = [
     "invoice_summary",
     "latest_price_list",
     "credit_notes",
+    "price_changes",
 ]
 
 
