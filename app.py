@@ -154,13 +154,12 @@ load_credit_note_xmls = getattr(ingest, "load_credit_note_xmls", None)
 load_invoice_xmls = ingest.load_invoice_xmls
 quote_identifier = ingest.quote_identifier
 save_uploaded_files = ingest.save_uploaded_files
-PREVIEW_TABLES = {
+PREVIEW_TABLES = [
     "facturas_individuales",
     "invoice_summary",
     "latest_price_list",
     "credit_notes",
-    "price_changes",
-}
+]
 
 
 st.set_page_config(
@@ -371,7 +370,7 @@ with st.sidebar:
             st.error(str(error))
 
     tables = list_tables()
-    preview_tables = [table for table in tables if table in PREVIEW_TABLES]
+    preview_tables = [table for table in PREVIEW_TABLES if table in tables]
 
 if preview_tables:
     with st.expander("Table preview", expanded=False):
