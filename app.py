@@ -63,13 +63,89 @@ def table_to_excel_bytes(table, sheet_name: str) -> bytes:
 
     return output.getvalue()
 
+
+def quote_sql_identifier(identifier: str) -> str:
+    return f'"{identifier.replace(chr(34), chr(34) * 2)}"'
+
+
+def values_match(left, right) -> bool:
+    if pd.isna(left) and pd.isna(right):
+        return True
+
+    return left == right
+
+
+def normalize_cell_value(value):
+    if pd.isna(value):
+        return None
+
+    return value
+
+
+def load_editable_table_preview(table_name: str, limit: int, filter_column: str | None, filter_text: str) -> pd.DataFrame:
+    table_identifier = quote_identifier(table_name)
+
+    if filter_column and filter_text:
+        column_identifier = quote_sql_identifier(filter_column)
+        return read_query(
+            f"""
+            select rowid as _rowid, *
+            from {table_identifier}
+            where cast({column_identifier} as varchar) ilike $filter_text
+            limit $limit
+            """,
+            {"filter_text": f"%{filter_text}%", "limit": limit},
+        )
+
+    return read_query(
+        f"""
+        select rowid as _rowid, *
+        from {table_identifier}
+        limit $limit
+        """,
+        {"limit": limit},
+    )
+
+
+def save_table_edits(table_name: str, original: pd.DataFrame, edited: pd.DataFrame) -> int:
+    table_identifier = quote_identifier(table_name)
+    original_by_rowid = original.set_index("_rowid")
+    edited_by_rowid = edited.set_index("_rowid")
+    changed_cells = 0
+
+    with analytics_connection() as connection:
+        for row_id, edited_row in edited_by_rowid.iterrows():
+            if row_id not in original_by_rowid.index:
+                continue
+
+            original_row = original_by_rowid.loc[row_id]
+
+            for column in edited_by_rowid.columns:
+                if values_match(original_row[column], edited_row[column]):
+                    continue
+
+                connection.execute(
+                    f"""
+                    update {table_identifier}
+                    set {quote_sql_identifier(column)} = $value
+                    where rowid = $row_id
+                    """,
+                    {
+                        "value": normalize_cell_value(edited_row[column]),
+                        "row_id": int(row_id),
+                    },
+                )
+                changed_cells += 1
+
+    return changed_cells
+
 from src.data import (
     has_table,
     load_invoice_monthly,
     load_provider_overview,
     load_provider_product_prices,
 )
-from src.db import read_query
+from src.db import analytics_connection, read_query
 from src.derived_tables import build_derived_tables
 from src import ingest
 
@@ -78,6 +154,13 @@ load_credit_note_xmls = getattr(ingest, "load_credit_note_xmls", None)
 load_invoice_xmls = ingest.load_invoice_xmls
 quote_identifier = ingest.quote_identifier
 save_uploaded_files = ingest.save_uploaded_files
+PREVIEW_TABLES = {
+    "facturas_individuales",
+    "invoice_summary",
+    "latest_price_list",
+    "credit_notes",
+    "price_changes",
+}
 
 
 st.set_page_config(
@@ -288,23 +371,72 @@ with st.sidebar:
             st.error(str(error))
 
     tables = list_tables()
+    preview_tables = [table for table in tables if table in PREVIEW_TABLES]
 
-if tables:
+if preview_tables:
     with st.expander("Table preview", expanded=False):
-        selected_table = st.selectbox("Table", tables, key="table_preview")
-        preview_limit = st.number_input(
-            "Preview rows",
-            min_value=10,
-            max_value=500,
-            value=50,
-            step=10,
-        )
+        selected_table = st.selectbox("Table", preview_tables, key="table_preview")
+        table_columns = read_query(f"describe {quote_identifier(selected_table)}")["column_name"].tolist()
+        filter_col, filter_text_col, limit_col = st.columns([2, 3, 1])
 
-        preview = read_query(
-            f"select * from {quote_identifier(selected_table)} limit $limit",
-            {"limit": preview_limit},
-        )
-        st.dataframe(preview, use_container_width=True, hide_index=True)
+        with filter_col:
+            selected_filter_column = st.selectbox(
+                "Filter column",
+                ["No filter", *table_columns],
+                key=f"{selected_table}_filter_column",
+            )
+
+        with filter_text_col:
+            filter_text = st.text_input(
+                "Contains",
+                key=f"{selected_table}_filter_text",
+                disabled=selected_filter_column == "No filter",
+            )
+
+        with limit_col:
+            preview_limit = st.number_input(
+                "Rows",
+                min_value=10,
+                max_value=500,
+                value=50,
+                step=10,
+            )
+
+        filter_column = None if selected_filter_column == "No filter" else selected_filter_column
+
+        try:
+            preview = load_editable_table_preview(selected_table, preview_limit, filter_column, filter_text)
+            editable_preview = preview.drop(columns=["_rowid"])
+            edited_preview = st.data_editor(
+                editable_preview,
+                use_container_width=True,
+                hide_index=True,
+                num_rows="fixed",
+                key=f"{selected_table}_editor",
+            )
+            edited_preview.insert(0, "_rowid", preview["_rowid"])
+
+            save_col, note_col = st.columns([1, 4])
+            with save_col:
+                save_edits = st.button("Save edits", use_container_width=True)
+
+            with note_col:
+                st.caption("Edits update the selected table directly. Rebuilding derived tables can overwrite derived-table edits.")
+
+            if save_edits:
+                changed_cells = save_table_edits(selected_table, preview, edited_preview)
+                st.cache_data.clear()
+                if changed_cells:
+                    st.success(f"Saved {changed_cells:,} cell update(s).")
+                else:
+                    st.info("No cell changes detected.")
+        except Exception as error:
+            st.warning(f"Editable preview is unavailable for this table: {error}")
+            preview = read_query(
+                f"select * from {quote_identifier(selected_table)} limit $limit",
+                {"limit": preview_limit},
+            )
+            st.dataframe(preview, use_container_width=True, hide_index=True)
 
         full_table = read_query(f"select * from {quote_identifier(selected_table)}")
 
