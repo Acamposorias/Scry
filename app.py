@@ -156,6 +156,7 @@ quote_identifier = ingest.quote_identifier
 save_uploaded_files = ingest.save_uploaded_files
 PREVIEW_TABLES = [
     "facturas_individuales",
+    "providers",
     "invoice_summary",
     "latest_price_list",
     "credit_notes",
@@ -503,6 +504,7 @@ if has_table("providers") and has_table("provider_invoices") and has_table("prov
                     "provider_name": "Provider",
                     "legal_name": "Legal name",
                     "provider_identification": "Identification",
+                    "credit": "Credit",
                     "pending_invoices": "Pending invoices",
                     "pending_amount_crc": st.column_config.NumberColumn("Pending amount", format="$%.0f"),
                     "product_count": "Products",

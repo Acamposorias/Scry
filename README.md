@@ -87,6 +87,8 @@ Full normalized invoice line table. It keeps the detailed fields needed by downs
 
 Provider dimension table. It extracts providers from invoices and credit notes, creating one provider record per provider ID. The provider ID uses the provider identification number when available, and falls back to a normalized provider name when identification is missing.
 
+It also includes an editable `credit` field for provider-specific payment terms or credit notes. Existing `credit` values are preserved when derived tables are rebuilt.
+
 `provider_invoices`
 
 Associates invoices to providers. One row per provider/invoice with invoice date, receiver, currency, exchange rate, total CRC amount, and line count.

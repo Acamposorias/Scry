@@ -224,6 +224,44 @@ def build_derived_tables() -> dict[str, int]:
                 """
             )
 
+        providers_columns = set()
+        providers_exists = connection.execute(
+            """
+            select count(*)
+            from information_schema.tables
+            where table_schema = 'main'
+              and table_name = 'providers'
+            """
+        ).fetchone()[0]
+
+        if providers_exists:
+            providers_columns = {
+                row[0].lower()
+                for row in connection.execute("describe providers").fetchall()
+            }
+
+        if providers_exists and "credit" in providers_columns:
+            connection.execute(
+                """
+                create or replace temporary table provider_credit_overrides as
+                select
+                    provider_id,
+                    credit
+                from providers
+                where credit is not null
+                """
+            )
+        else:
+            connection.execute(
+                """
+                create or replace temporary table provider_credit_overrides as
+                select
+                    cast(null as varchar) as provider_id,
+                    cast(null as varchar) as credit
+                where false
+                """
+            )
+
         connection.execute(
             """
             create or replace table providers as
@@ -251,18 +289,33 @@ def build_derived_tables() -> dict[str, int]:
                     numero_consecutivo as document_number
                 from clean_credit_note_lines
                 where coalesce(nullif(emisor_identificacion, ''), nullif(proveedor, '')) is not null
+            ),
+            provider_base as (
+                select
+                    provider_id,
+                    any_value(provider_identification) as provider_identification,
+                    any_value(provider_name) as provider_name,
+                    any_value(legal_name) as legal_name,
+                    min(fecha_emision) as first_seen_at,
+                    max(fecha_emision) as last_seen_at,
+                    count(distinct case when source_type = 'invoice' then document_number end) as invoice_count,
+                    count(distinct case when source_type = 'credit_note' then document_number end) as credit_note_count
+                from provider_events
+                group by provider_id
             )
             select
-                provider_id,
-                any_value(provider_identification) as provider_identification,
-                any_value(provider_name) as provider_name,
-                any_value(legal_name) as legal_name,
-                min(fecha_emision) as first_seen_at,
-                max(fecha_emision) as last_seen_at,
-                count(distinct case when source_type = 'invoice' then document_number end) as invoice_count,
-                count(distinct case when source_type = 'credit_note' then document_number end) as credit_note_count
-            from provider_events
-            group by provider_id
+                provider_base.provider_id,
+                provider_base.provider_identification,
+                provider_base.provider_name,
+                provider_base.legal_name,
+                provider_credit_overrides.credit,
+                provider_base.first_seen_at,
+                provider_base.last_seen_at,
+                provider_base.invoice_count,
+                provider_base.credit_note_count
+            from provider_base
+            left join provider_credit_overrides
+                on provider_base.provider_id = provider_credit_overrides.provider_id
             order by provider_name
             """
         )

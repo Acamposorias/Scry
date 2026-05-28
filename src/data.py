@@ -84,6 +84,7 @@ def load_provider_overview() -> pd.DataFrame:
             providers.provider_name,
             providers.legal_name,
             providers.provider_identification,
+            providers.credit,
             coalesce(invoice_totals.pending_invoices, 0) as pending_invoices,
             coalesce(invoice_totals.pending_amount_crc, 0) as pending_amount_crc,
             coalesce(product_totals.product_count, 0) as product_count,
