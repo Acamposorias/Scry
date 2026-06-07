@@ -22,6 +22,13 @@ ELECTRONIC_DOCUMENT_TYPES = {
     "FacturaElectronica": "FACTURA",
     "NotaCreditoElectronica": "NOTA_CREDITO",
 }
+CREDIT_NOTE_REVIEW_COLUMNS = {
+    "FechaEmision": "FECHA NOTA DE CREDITO",
+    "Emisor_Nombre": "PROVEEDOR",
+    "Referencia_Numero": "FACTURA ASOCIADA",
+    "Receptor_Nombre": "RUBRO",
+    "MontoTotalLinea": "FINAL",
+}
 
 
 @dataclass(frozen=True)
@@ -298,6 +305,24 @@ def write_frame_to_table(frame: pd.DataFrame, table_name: str, replace: bool = T
         return connection.execute(f"select count(*) from {table_identifier}").fetchone()[0]
 
 
+def format_credit_notes_for_review(frame: pd.DataFrame) -> pd.DataFrame:
+    """Return the business-facing credit-note table used for preview/export."""
+
+    missing_columns = [
+        column
+        for column in CREDIT_NOTE_REVIEW_COLUMNS
+        if column not in frame.columns
+    ]
+
+    if missing_columns:
+        raise ValueError(f"Missing credit-note columns: {', '.join(missing_columns)}")
+
+    review = frame[list(CREDIT_NOTE_REVIEW_COLUMNS)].rename(columns=CREDIT_NOTE_REVIEW_COLUMNS)
+    review["FINAL"] = pd.to_numeric(review["FINAL"], errors="coerce").round(2)
+
+    return review
+
+
 def load_invoice_xmls(source_paths: list[Path], table_name: str = "source_data", replace: bool = True) -> InvoiceLoadResult:
     """Load invoice XML files into `source_data`.
 
@@ -335,7 +360,7 @@ def load_invoice_xmls(source_paths: list[Path], table_name: str = "source_data",
 
 
 def load_credit_note_xmls(source_paths: list[Path], table_name: str = "credit_notes", replace: bool = True) -> InvoiceLoadResult:
-    """Load credit-note XML files into the separate `credit_notes` table."""
+    """Load credit-note XML files into internal detail and review tables."""
 
     if not source_paths:
         raise ValueError("Upload at least one credit note XML.")
@@ -357,7 +382,9 @@ def load_credit_note_xmls(source_paths: list[Path], table_name: str = "credit_no
     combined = pd.DataFrame(rows).fillna("")
     total_rows_uploaded = len(combined)
     combined, duplicate_rows_removed = deduplicate_invoice_lines(combined)
-    row_count = write_frame_to_table(combined, table_name, replace=replace)
+    detail_table_name = "credit_note_lines" if table_name == "credit_notes" else f"{table_name}_lines"
+    write_frame_to_table(combined, detail_table_name, replace=replace)
+    row_count = write_frame_to_table(format_credit_notes_for_review(combined), table_name, replace=replace)
 
     return InvoiceLoadResult(
         total_rows_uploaded=total_rows_uploaded,

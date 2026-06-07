@@ -65,7 +65,7 @@ Credit-note load:
 
 1. Upload credit-note XML files.
 2. Click `Generate credit_notes from XML`.
-3. The app writes credit-note line records to `credit_notes`.
+3. The app writes detailed credit-note line records to `credit_note_lines` and a clean review/export table to `credit_notes`.
 
 Credit notes are intentionally kept separate from invoices for now. Reconciliation and application against invoices is a future workflow.
 
@@ -75,9 +75,13 @@ Credit notes are intentionally kept separate from invoices for now. Reconciliati
 
 Raw invoice staging table. One row per invoice line.
 
+`credit_note_lines`
+
+Internal credit-note staging table. One row per credit-note line. Includes reference fields such as `Referencia_Numero`, `Referencia_FechaEmision`, and `Referencia_Razon`.
+
 `credit_notes`
 
-Raw credit-note staging table. One row per credit-note line. Includes reference fields such as `Referencia_Numero`, `Referencia_FechaEmision`, and `Referencia_Razon`.
+Business-facing credit-note review table. Current exported fields are `FECHA NOTA DE CREDITO`, `PROVEEDOR`, `FACTURA ASOCIADA`, `RUBRO`, and `FINAL`.
 
 `clean_invoice_lines`
 

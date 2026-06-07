@@ -144,18 +144,61 @@ def build_derived_tables() -> dict[str, int]:
             """
         )
 
-        credit_notes_exists = connection.execute(
-            """
-            select count(*)
-            from information_schema.tables
-            where table_schema = 'main'
-              and table_name = 'credit_notes'
-            """
-        ).fetchone()[0]
+        credit_note_source_table = None
+        credit_note_required_columns = {
+            "sourcefile",
+            "numeroconsecutivo",
+            "fechaemision",
+            "emisor_nombre",
+            "emisor_nombrecomercial",
+            "emisor_identificacion",
+            "receptor_nombre",
+            "receptor_identificacion",
+            "codigomoneda",
+            "tipocambio",
+            "referencia_numero",
+            "referencia_fechaemision",
+            "referencia_codigo",
+            "referencia_razon",
+            "numerolinea",
+            "codigocabys",
+            "detalle",
+            "unidadmedida",
+            "cantidad",
+            "preciounitario",
+            "subtotal",
+            "impuestoneto",
+            "montototallinea",
+            "impuesto_tarifa",
+            "impuesto_monto",
+        }
 
-        if credit_notes_exists:
-            connection.execute(
+        for candidate_table in ("credit_note_lines", "credit_notes"):
+            candidate_exists = connection.execute(
                 """
+                select count(*)
+                from information_schema.tables
+                where table_schema = 'main'
+                  and table_name = ?
+                """,
+                [candidate_table],
+            ).fetchone()[0]
+
+            if not candidate_exists:
+                continue
+
+            candidate_columns = {
+                row[0].lower()
+                for row in connection.execute(f"describe {candidate_table}").fetchall()
+            }
+
+            if credit_note_required_columns.issubset(candidate_columns):
+                credit_note_source_table = candidate_table
+                break
+
+        if credit_note_source_table:
+            connection.execute(
+                f"""
                 create or replace temporary table clean_credit_note_lines as
                 select
                     SourceFile as source_file,
@@ -185,7 +228,7 @@ def build_derived_tables() -> dict[str, int]:
                     round(try_cast(Impuesto_Tarifa as double), 2) as impuesto_tarifa,
                     round(try_cast(Impuesto_Monto as double), 2) as impuesto_monto,
                     round(try_cast(MontoTotalLinea as double) * coalesce(nullif(try_cast(TipoCambio as double), 0), 1), 2) as monto_total_linea_crc
-                from credit_notes
+                from {credit_note_source_table}
                 """
             )
         else:
