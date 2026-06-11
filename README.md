@@ -29,6 +29,18 @@ Run the app locally:
 streamlit run app.py
 ```
 
+Run the fast development loop:
+
+```powershell
+python scripts/dev_loop.py
+```
+
+Run the development loop with a local DuckDB smoke test:
+
+```powershell
+python scripts/dev_loop.py --with-db
+```
+
 ## Database Configuration
 
 The app defaults to local DuckDB:
@@ -50,38 +62,77 @@ token = "your_motherduck_token"
 
 DuckDB is pinned in `requirements.txt` because MotherDuck support can lag the newest DuckDB release.
 
+For multi-client deployments, configure fixed users and one database per client:
+
+```toml
+[users.admin]
+name = "Admin"
+client_id = "client_a"
+password_hash = "pbkdf2_sha256$260000$replace_salt$replace_hash"
+
+[clients.client_a]
+name = "Client A"
+
+[clients.client_a.database]
+engine = "motherduck"
+database = "client_a_database"
+token = "your_motherduck_token"
+```
+
+Generate password hashes with:
+
+```powershell
+python -c "from src.auth import hash_password; print(hash_password('change-me'))"
+```
+
 ## App Workflow
 
-The sidebar has separate loaders for invoices and credit notes.
+The sidebar has upload controls for invoices and optional credit notes.
 
-Invoice load:
+Full pipeline run:
 
 1. Upload invoice XML files.
-2. Click `Generate source_data from XML`.
-3. The app writes invoice line records to `source_data`.
-4. Derived tables are rebuilt from `source_data`.
-
-Credit-note load:
-
-1. Upload credit-note XML files.
-2. Click `Generate credit_notes from XML`.
-3. The app writes detailed credit-note line records to `credit_note_lines` and a clean review/export table to `credit_notes`.
+2. Optionally upload credit-note XML files.
+3. Click `Run full pipeline`.
+4. The app creates a row in `pipeline_runs`.
+5. Raw invoice rows are appended to `source_data_history`.
+6. Raw credit-note rows are appended to `credit_note_lines_history`.
+7. Current-run tables are refreshed as `source_data`, `credit_note_lines`, and `credit_notes`.
+8. Derived tables are rebuilt from the selected current run.
 
 Credit notes are intentionally kept separate from invoices for now. Reconciliation and application against invoices is a future workflow.
+
+The app shows the latest successful run by default. Use the sidebar run selector to review an older successful run with the same report/table names.
 
 ## Table Outputs
 
 `source_data`
 
-Raw invoice staging table. One row per invoice line.
+Current selected run invoice staging table. One row per invoice line.
+
+`source_data_history`
+
+Append-only invoice history table. Each row includes `run_id` and `loaded_at`.
 
 `credit_note_lines`
 
-Internal credit-note staging table. One row per credit-note line. Includes reference fields such as `Referencia_Numero`, `Referencia_FechaEmision`, and `Referencia_Razon`.
+Current selected run internal credit-note staging table. One row per credit-note line. Includes reference fields such as `Referencia_Numero`, `Referencia_FechaEmision`, and `Referencia_Razon`.
+
+`credit_note_lines_history`
+
+Append-only credit-note history table. Each row includes `run_id` and `loaded_at`.
 
 `credit_notes`
 
 Business-facing credit-note review table. Current exported fields are `FECHA NOTA DE CREDITO`, `PROVEEDOR`, `FACTURA ASOCIADA`, `RUBRO`, and `FINAL`.
+
+`pipeline_runs`
+
+One row per pipeline execution, including status, user, timestamps, row counts, and derived-table counts.
+
+`manual_edits_history`
+
+Audit trail for table-preview cell edits.
 
 `clean_invoice_lines`
 
@@ -179,10 +230,14 @@ Providers:
 
 - `app.py`: Streamlit UI, table preview, Excel export, and dashboard.
 - `src/ingest.py`: file upload handling, XML parsing, table loading, deduplication.
+- `src/auth.py`: Streamlit login, password hashing, and client session state.
+- `src/history.py`: run history, current-run staging refresh, and manual edit audit.
+- `src/pipeline.py`: full upload/history/build orchestration.
 - `src/derived_tables.py`: SQL transformations and derived table generation.
 - `src/data.py`: dashboard-facing query helpers.
 - `src/db.py`: local DuckDB, MotherDuck, and Snowflake query adapters.
 - `src/config.py`: Streamlit secrets and local database defaults.
+- `scripts/dev_loop.py`: syntax/import checks, with optional local seed and derived-table rebuild.
 - `scripts/`: local utility scripts.
 - `data/`: local DuckDB files and uploads, ignored by git.
 
@@ -206,12 +261,17 @@ Run a compile check:
 python -m compileall app.py src
 ```
 
+Run the preferred local feedback loop:
+
+```powershell
+python scripts/dev_loop.py --with-db
+```
+
 ## MVP Gaps
 
 Important remaining MVP work:
 
 - validation reports for totals, duplicates, missing fields, and out-of-period invoices
 - credit-note reconciliation against original invoices
-- run history for each pipeline execution
 - client-specific configuration for mappings and output rules
 - user-friendly error reports instead of raw tracebacks

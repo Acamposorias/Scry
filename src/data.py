@@ -50,6 +50,7 @@ def load_invoice_monthly() -> pd.DataFrame:
         """
     )
 
+
 @st.cache_data(ttl=600)
 def load_provider_overview() -> pd.DataFrame:
     """Load provider-level invoice, product, and credit-note status."""

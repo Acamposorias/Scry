@@ -55,10 +55,10 @@ def motherduck_connection(config: dict):
 
 
 @contextmanager
-def analytics_connection():
+def analytics_connection(client_id: str | None = None):
     """Return the active write-capable analytics connection."""
 
-    config = get_database_config()
+    config = get_database_config(client_id=client_id)
     engine = config.get("engine", "duckdb").lower()
 
     if engine == "duckdb":
@@ -98,18 +98,18 @@ def snowflake_url(config: dict) -> str:
     return f"{url}?{'&'.join(query_parts)}"
 
 
-def read_query(sql: str, params: dict | None = None) -> pd.DataFrame:
+def read_query(sql: str, params: dict | None = None, client_id: str | None = None) -> pd.DataFrame:
     """Execute a query against the configured analytics engine."""
 
-    config = get_database_config()
+    config = get_database_config(client_id=client_id)
     engine = config.get("engine", "duckdb").lower()
 
     if engine == "duckdb":
-        with analytics_connection() as connection:
+        with analytics_connection(client_id=client_id) as connection:
             return connection.execute(sql, params or {}).df()
 
     if engine == "motherduck":
-        with analytics_connection() as connection:
+        with analytics_connection(client_id=client_id) as connection:
             return connection.execute(sql, params or {}).df()
 
     if engine == "snowflake":

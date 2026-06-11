@@ -1,8 +1,28 @@
-import streamlit as st
-import plotly.express as px
-import pandas as pd
 import base64
 from io import BytesIO
+
+import pandas as pd
+import plotly.express as px
+import streamlit as st
+
+from src import ingest
+from src.auth import ensure_authenticated, logout
+from src.data import (
+    has_table,
+    load_invoice_monthly,
+    load_provider_overview,
+    load_provider_product_prices,
+)
+from src.db import analytics_connection, read_query
+from src.derived_tables import build_derived_tables
+from src.history import (
+    ensure_history_tables,
+    get_pipeline_runs,
+    get_selected_run_id,
+    record_manual_edit,
+    select_pipeline_run,
+)
+from src.pipeline import run_full_pipeline
 
 LOGO_PATH = "assets/scry-logo.png"
 FAVICON_PATH = "assets/scry-favicon.png"
@@ -107,11 +127,19 @@ def load_editable_table_preview(table_name: str, limit: int, filter_column: str 
     )
 
 
-def save_table_edits(table_name: str, original: pd.DataFrame, edited: pd.DataFrame) -> int:
+def save_table_edits(
+    table_name: str,
+    original: pd.DataFrame,
+    edited: pd.DataFrame,
+    *,
+    edited_by: str,
+    run_id: str | None,
+) -> int:
     table_identifier = quote_identifier(table_name)
     original_by_rowid = original.set_index("_rowid")
     edited_by_rowid = edited.set_index("_rowid")
     changed_cells = 0
+    audit_events = []
 
     with analytics_connection() as connection:
         for row_id, edited_row in edited_by_rowid.iterrows():
@@ -135,33 +163,38 @@ def save_table_edits(table_name: str, original: pd.DataFrame, edited: pd.DataFra
                         "row_id": int(row_id),
                     },
                 )
+                audit_events.append(
+                    {
+                        "run_id": run_id,
+                        "table_name": table_name,
+                        "row_id": str(row_id),
+                        "column_name": column,
+                        "old_value": original_row[column],
+                        "new_value": edited_row[column],
+                        "edited_by": edited_by,
+                    }
+                )
                 changed_cells += 1
+
+    for audit_event in audit_events:
+        record_manual_edit(**audit_event)
 
     return changed_cells
 
-from src.data import (
-    has_table,
-    load_invoice_monthly,
-    load_provider_overview,
-    load_provider_product_prices,
-)
-from src.db import analytics_connection, read_query
-from src.derived_tables import build_derived_tables
-from src import ingest
 
 list_tables = ingest.list_tables
-load_credit_note_xmls = getattr(ingest, "load_credit_note_xmls", None)
-load_invoice_xmls = ingest.load_invoice_xmls
 quote_identifier = ingest.quote_identifier
 save_uploaded_files = ingest.save_uploaded_files
 PREVIEW_TABLES = [
     "facturas_individuales",
+    "pipeline_runs",
     "providers",
     "invoice_summary",
     "latest_price_list",
     "credit_notes",
     "price_changes",
 ]
+READ_ONLY_PREVIEW_TABLES = {"pipeline_runs"}
 
 
 st.set_page_config(
@@ -295,6 +328,14 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
+current_user = ensure_authenticated()
+
+if current_user is None:
+    st.stop()
+
+ensure_history_tables()
+current_run_id = get_selected_run_id()
+
 with open(BANNER_PATH, "rb") as banner_file:
     banner_data = base64.b64encode(banner_file.read()).decode("utf-8")
 
@@ -310,6 +351,68 @@ st.markdown(
 with st.sidebar:
     st.image(LOGO_PATH, use_container_width=True)
     st.divider()
+    st.caption(f"Signed in as {current_user.display_name}")
+    st.caption(f"Client: {current_user.client_name}")
+
+    if st.button("Sign out", use_container_width=True):
+        logout()
+        st.rerun()
+
+    st.divider()
+    runs = get_pipeline_runs()
+
+    if not runs.empty:
+        successful_runs = runs[runs["status"].eq("success")].copy()
+
+        if not successful_runs.empty:
+            def run_count(value) -> int:
+                return int(value) if pd.notna(value) else 0
+
+            successful_runs["run_label"] = successful_runs.apply(
+                lambda row: (
+                    f"{row['started_at']} | invoices: {run_count(row['invoice_rows_loaded']):,} "
+                    f"| credit notes: {run_count(row['credit_note_rows_loaded']):,}"
+                ),
+                axis=1,
+            )
+            run_options = ["Latest successful run", *successful_runs["run_label"].tolist()]
+            latest_run_id = successful_runs.iloc[0]["run_id"]
+            selected_index = 0
+
+            if current_run_id and current_run_id != latest_run_id:
+                current_run_label = successful_runs.loc[
+                    successful_runs["run_id"] == current_run_id,
+                    "run_label",
+                ]
+
+                if not current_run_label.empty:
+                    selected_index = run_options.index(current_run_label.iloc[0])
+
+            selected_run_label = st.selectbox("Report run", run_options, index=selected_index)
+
+            if selected_run_label != "Latest successful run":
+                selected_run_id = successful_runs.loc[
+                    successful_runs["run_label"] == selected_run_label,
+                    "run_id",
+                ].iloc[0]
+            else:
+                selected_run_id = latest_run_id
+
+            if selected_run_id != current_run_id:
+                try:
+                    select_pipeline_run(selected_run_id)
+                    build_derived_tables()
+                    st.cache_data.clear()
+                    current_run_id = selected_run_id
+                    st.success("Loaded selected run.")
+                except Exception as error:
+                    st.error(f"Could not load selected run: {error}")
+
+        failed_runs = runs[runs["status"].eq("failed")]
+        if not failed_runs.empty:
+            st.warning(f"{len(failed_runs):,} failed pipeline run(s). Check `pipeline_runs` for details.")
+
+    st.divider()
     st.header("Load Data")
     invoice_xmls = st.file_uploader(
         "Upload invoice XMLs",
@@ -324,45 +427,36 @@ with st.sidebar:
         key="credit_note_xmls",
     )
 
-    if st.button("Generate source_data from XML", disabled=not invoice_xmls, use_container_width=True):
+    if st.button("Run full pipeline", disabled=not invoice_xmls, use_container_width=True):
         try:
             saved_paths = save_uploaded_files(invoice_xmls)
-            load_result = load_invoice_xmls(saved_paths, table_name="source_data", replace=True)
-            row_counts = build_derived_tables()
+            saved_credit_note_paths = save_uploaded_files(credit_note_xmls or [])
+            pipeline_result = run_full_pipeline(
+                invoice_paths=saved_paths,
+                credit_note_paths=saved_credit_note_paths,
+                client_id=current_user.client_id,
+                username=current_user.username,
+            )
             st.cache_data.clear()
-            summary = ", ".join(f"{name}: {count:,}" for name, count in row_counts.items())
+            current_run_id = pipeline_result.run_id
+            summary = ", ".join(
+                f"{name}: {count:,}"
+                for name, count in pipeline_result.derived_table_counts.items()
+            )
             st.success(
-                "Generated `source_data` from XML. "
-                f"Parsed {load_result.total_rows_uploaded:,} invoice rows, "
-                f"removed {load_result.duplicate_rows_removed:,} duplicate invoice lines, "
-                f"loaded {load_result.final_rows_loaded:,} rows. "
+                "Pipeline run completed. "
+                f"Run `{pipeline_result.run_id}`. "
+                f"Parsed {pipeline_result.invoice_rows_uploaded:,} invoice rows, "
+                f"removed {pipeline_result.invoice_duplicates_removed:,} duplicate invoice lines, "
+                f"loaded {pipeline_result.invoice_rows_loaded:,} invoice rows. "
+                f"Parsed {pipeline_result.credit_note_rows_uploaded:,} credit note rows, "
+                f"loaded {pipeline_result.credit_note_rows_loaded:,} credit note rows. "
                 f"Generated tables. {summary}"
             )
         except Exception as error:
             st.error(str(error))
 
-    if load_credit_note_xmls is None:
-        st.warning("Credit note loading is not available in this deployment yet. Reboot the app after the latest code finishes deploying.")
-
-    if st.button(
-        "Generate credit_notes from XML",
-        disabled=not credit_note_xmls or load_credit_note_xmls is None,
-        use_container_width=True,
-    ):
-        try:
-            saved_paths = save_uploaded_files(credit_note_xmls)
-            load_result = load_credit_note_xmls(saved_paths, table_name="credit_notes", replace=True)
-            st.cache_data.clear()
-            st.success(
-                "Generated `credit_notes` from XML. "
-                f"Parsed {load_result.total_rows_uploaded:,} credit note rows, "
-                f"removed {load_result.duplicate_rows_removed:,} duplicate credit note lines, "
-                f"loaded {load_result.final_rows_loaded:,} rows."
-            )
-        except Exception as error:
-            st.error(str(error))
-
-    if st.button("Build derived tables", disabled="source_data" not in list_tables(), use_container_width=True):
+    if st.button("Rebuild derived tables", disabled="source_data" not in list_tables(), use_container_width=True):
         try:
             row_counts = build_derived_tables()
             st.cache_data.clear()
@@ -407,30 +501,41 @@ if preview_tables:
 
         try:
             preview = load_editable_table_preview(selected_table, preview_limit, filter_column, filter_text)
-            editable_preview = preview.drop(columns=["_rowid"])
-            edited_preview = st.data_editor(
-                editable_preview,
-                use_container_width=True,
-                hide_index=True,
-                num_rows="fixed",
-                key=f"{selected_table}_editor",
-            )
-            edited_preview.insert(0, "_rowid", preview["_rowid"])
+            display_preview = preview.drop(columns=["_rowid"])
 
-            save_col, note_col = st.columns([1, 4])
-            with save_col:
-                save_edits = st.button("Save edits", use_container_width=True)
+            if selected_table in READ_ONLY_PREVIEW_TABLES:
+                st.dataframe(display_preview, use_container_width=True, hide_index=True)
+                st.caption("This history table is read-only.")
+            else:
+                edited_preview = st.data_editor(
+                    display_preview,
+                    use_container_width=True,
+                    hide_index=True,
+                    num_rows="fixed",
+                    key=f"{selected_table}_editor",
+                )
+                edited_preview.insert(0, "_rowid", preview["_rowid"])
 
-            with note_col:
-                st.caption("Edits update the selected table directly. Rebuilding derived tables can overwrite derived-table edits.")
+                save_col, note_col = st.columns([1, 4])
+                with save_col:
+                    save_edits = st.button("Save edits", use_container_width=True)
 
-            if save_edits:
-                changed_cells = save_table_edits(selected_table, preview, edited_preview)
-                st.cache_data.clear()
-                if changed_cells:
-                    st.success(f"Saved {changed_cells:,} cell update(s).")
-                else:
-                    st.info("No cell changes detected.")
+                with note_col:
+                    st.caption("Edits update the selected table directly and are recorded in `manual_edits_history`.")
+
+                if save_edits:
+                    changed_cells = save_table_edits(
+                        selected_table,
+                        preview,
+                        edited_preview,
+                        edited_by=current_user.username,
+                        run_id=current_run_id,
+                    )
+                    st.cache_data.clear()
+                    if changed_cells:
+                        st.success(f"Saved {changed_cells:,} cell update(s).")
+                    else:
+                        st.info("No cell changes detected.")
         except Exception as error:
             st.warning(f"Editable preview is unavailable for this table: {error}")
             preview = read_query(
