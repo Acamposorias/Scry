@@ -6,7 +6,6 @@ import plotly.express as px
 import streamlit as st
 
 from src import ingest
-from src.auth import ensure_authenticated, logout
 from src.data import (
     has_table,
     load_invoice_monthly,
@@ -27,6 +26,8 @@ from src.pipeline import run_full_pipeline
 LOGO_PATH = "assets/scry-logo.png"
 FAVICON_PATH = "assets/scry-favicon.png"
 BANNER_PATH = "assets/scry-banner.png"
+DEFAULT_CLIENT_ID = "local"
+DEFAULT_PIPELINE_USER = "local"
 
 SCRY_CHART_COLORS = [
     "#f5f0e8",
@@ -328,11 +329,6 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-current_user = ensure_authenticated()
-
-if current_user is None:
-    st.stop()
-
 ensure_history_tables()
 current_run_id = get_selected_run_id()
 
@@ -350,14 +346,6 @@ st.markdown(
 
 with st.sidebar:
     st.image(LOGO_PATH, use_container_width=True)
-    st.divider()
-    st.caption(f"Signed in as {current_user.display_name}")
-    st.caption(f"Client: {current_user.client_name}")
-
-    if st.button("Sign out", use_container_width=True):
-        logout()
-        st.rerun()
-
     st.divider()
     runs = get_pipeline_runs()
 
@@ -434,8 +422,8 @@ with st.sidebar:
             pipeline_result = run_full_pipeline(
                 invoice_paths=saved_paths,
                 credit_note_paths=saved_credit_note_paths,
-                client_id=current_user.client_id,
-                username=current_user.username,
+                client_id=DEFAULT_CLIENT_ID,
+                username=DEFAULT_PIPELINE_USER,
             )
             st.cache_data.clear()
             current_run_id = pipeline_result.run_id
@@ -528,7 +516,7 @@ if preview_tables:
                         selected_table,
                         preview,
                         edited_preview,
-                        edited_by=current_user.username,
+                        edited_by=DEFAULT_PIPELINE_USER,
                         run_id=current_run_id,
                     )
                     st.cache_data.clear()

@@ -62,29 +62,6 @@ token = "your_motherduck_token"
 
 DuckDB is pinned in `requirements.txt` because MotherDuck support can lag the newest DuckDB release.
 
-For multi-client deployments, configure fixed users and one database per client:
-
-```toml
-[users.admin]
-name = "Admin"
-client_id = "client_a"
-password_hash = "pbkdf2_sha256$260000$replace_salt$replace_hash"
-
-[clients.client_a]
-name = "Client A"
-
-[clients.client_a.database]
-engine = "motherduck"
-database = "client_a_database"
-token = "your_motherduck_token"
-```
-
-Generate password hashes with:
-
-```powershell
-python -c "from src.auth import hash_password; print(hash_password('change-me'))"
-```
-
 ## App Workflow
 
 The sidebar has upload controls for invoices and optional credit notes.
@@ -128,7 +105,7 @@ Business-facing credit-note review table. Current exported fields are `FECHA NOT
 
 `pipeline_runs`
 
-One row per pipeline execution, including status, user, timestamps, row counts, and derived-table counts.
+One row per pipeline execution, including status, timestamps, row counts, and derived-table counts. User/client fields are currently filled with local defaults.
 
 `manual_edits_history`
 
@@ -230,7 +207,6 @@ Providers:
 
 - `app.py`: Streamlit UI, table preview, Excel export, and dashboard.
 - `src/ingest.py`: file upload handling, XML parsing, table loading, deduplication.
-- `src/auth.py`: Streamlit login, password hashing, and client session state.
 - `src/history.py`: run history, current-run staging refresh, and manual edit audit.
 - `src/pipeline.py`: full upload/history/build orchestration.
 - `src/derived_tables.py`: SQL transformations and derived table generation.

@@ -21,7 +21,6 @@ PYTHON_FILES = [
     *sorted((PROJECT_ROOT / "scripts").glob("*.py")),
 ]
 IMPORT_TARGETS = [
-    "src.auth",
     "src.config",
     "src.db",
     "src.ingest",
