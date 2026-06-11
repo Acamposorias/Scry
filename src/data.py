@@ -17,6 +17,16 @@ def has_table(table_name: str) -> bool:
     return table_name in list_tables()
 
 
+def has_column(table_name: str, column_name: str) -> bool:
+    """Return whether a table has a column in the active analytics database."""
+
+    if not has_table(table_name):
+        return False
+
+    columns = read_query(f'describe "{table_name}"')["column_name"].str.lower()
+    return column_name.lower() in set(columns)
+
+
 @st.cache_data(ttl=600)
 def load_table_counts(table_names: tuple[str, ...]) -> pd.DataFrame:
     """Return row counts for a selected list of tables."""
@@ -55,8 +65,10 @@ def load_invoice_monthly() -> pd.DataFrame:
 def load_provider_overview() -> pd.DataFrame:
     """Load provider-level invoice, product, and credit-note status."""
 
+    credit_expression = "providers.credit" if has_column("providers", "credit") else "cast(null as varchar) as credit"
+
     return read_query(
-        """
+        f"""
         with invoice_totals as (
             select
                 provider_id,
@@ -85,7 +97,7 @@ def load_provider_overview() -> pd.DataFrame:
             providers.provider_name,
             providers.legal_name,
             providers.provider_identification,
-            providers.credit,
+            {credit_expression},
             coalesce(invoice_totals.pending_invoices, 0) as pending_invoices,
             coalesce(invoice_totals.pending_amount_crc, 0) as pending_amount_crc,
             coalesce(product_totals.product_count, 0) as product_count,
