@@ -6,6 +6,13 @@ import plotly.express as px
 import streamlit as st
 
 from src import ingest
+from src.config import (
+    get_active_tenant_id,
+    get_environment_name,
+    get_tenant_options,
+    has_tenants_configured,
+    set_active_tenant_id,
+)
 from src.data import (
     has_table,
     load_invoice_monthly,
@@ -329,9 +336,6 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-ensure_history_tables()
-current_run_id = get_selected_run_id()
-
 with open(BANNER_PATH, "rb") as banner_file:
     banner_data = base64.b64encode(banner_file.read()).decode("utf-8")
 
@@ -344,9 +348,55 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
+active_tenant_id = get_active_tenant_id()
+active_client_id = active_tenant_id or DEFAULT_CLIENT_ID
+active_environment = get_environment_name()
+
 with st.sidebar:
     st.image(LOGO_PATH, use_container_width=True)
     st.divider()
+    st.caption(f"Environment: {active_environment}")
+
+    if has_tenants_configured():
+        tenant_options = get_tenant_options()
+        tenant_labels = [
+            f"{tenant['name']} ({tenant['tenant_id']})"
+            for tenant in tenant_options
+        ]
+        tenant_by_label = {
+            label: tenant
+            for label, tenant in zip(tenant_labels, tenant_options)
+        }
+        current_tenant_label = next(
+            (
+                label
+                for label, tenant in tenant_by_label.items()
+                if tenant["tenant_id"] == active_tenant_id
+            ),
+            tenant_labels[0],
+        )
+        selected_tenant_label = st.selectbox(
+            "Tenant",
+            tenant_labels,
+            index=tenant_labels.index(current_tenant_label),
+        )
+        selected_tenant = tenant_by_label[selected_tenant_label]
+
+        if selected_tenant["tenant_id"] != active_tenant_id:
+            set_active_tenant_id(selected_tenant["tenant_id"])
+            st.cache_data.clear()
+            st.rerun()
+
+        st.caption(f"Database: {selected_tenant['database'] or 'configured tenant database'}")
+    else:
+        st.caption("Tenant: local")
+
+    st.divider()
+
+ensure_history_tables()
+current_run_id = get_selected_run_id()
+
+with st.sidebar:
     runs = get_pipeline_runs()
 
     if not runs.empty:
@@ -422,7 +472,7 @@ with st.sidebar:
             pipeline_result = run_full_pipeline(
                 invoice_paths=saved_paths,
                 credit_note_paths=saved_credit_note_paths,
-                client_id=DEFAULT_CLIENT_ID,
+                client_id=active_client_id,
                 username=DEFAULT_PIPELINE_USER,
             )
             st.cache_data.clear()

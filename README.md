@@ -62,9 +62,63 @@ token = "your_motherduck_token"
 
 DuckDB is pinned in `requirements.txt` because MotherDuck support can lag the newest DuckDB release.
 
+For tenant routing, define an environment and one database per tenant:
+
+```toml
+[environment]
+name = "testing"
+
+[database]
+engine = "motherduck"
+token = "your_motherduck_token"
+
+[tenants.pronto]
+name = "Pronto"
+database = "scry_test_pronto"
+
+[tenants.client_b]
+name = "Client B"
+database = "scry_test_client_b"
+```
+
+For production, use the same structure with production database names:
+
+```toml
+[environment]
+name = "production"
+
+[database]
+engine = "motherduck"
+token = "your_motherduck_token"
+
+[tenants.pronto]
+name = "Pronto"
+database = "scry_prod_pronto"
+```
+
+If a tenant owns its own MotherDuck account, put the full database config under that tenant:
+
+```toml
+[tenants.pronto]
+name = "Pronto"
+
+[tenants.pronto.database]
+engine = "motherduck"
+database = "scry_prod_pronto"
+token = "tenant_owned_token"
+```
+
+If no tenants are configured, Scry falls back to the single `[database]` config.
+
 ## App Workflow
 
 The sidebar has upload controls for invoices and optional credit notes.
+
+If tenants are configured, the sidebar also shows:
+
+- the active environment
+- a tenant selector
+- the active tenant database
 
 Full pipeline run:
 
@@ -79,7 +133,7 @@ Full pipeline run:
 
 Credit notes are intentionally kept separate from invoices for now. Reconciliation and application against invoices is a future workflow.
 
-The app shows the latest successful run by default. Use the sidebar run selector to review an older successful run with the same report/table names.
+The app shows the latest successful run by default. Use the sidebar run selector to review an older successful run with the same report/table names. If tenants are configured, run history is stored inside the selected tenant database.
 
 ## Table Outputs
 
@@ -213,6 +267,7 @@ Providers:
 - `src/data.py`: dashboard-facing query helpers.
 - `src/db.py`: local DuckDB, MotherDuck, and Snowflake query adapters.
 - `src/config.py`: Streamlit secrets and local database defaults.
+- Tenant/environment routing is configured in Streamlit secrets; no code changes are needed to add a tenant database.
 - `scripts/dev_loop.py`: syntax/import checks, with optional local seed and derived-table rebuild.
 - `scripts/`: local utility scripts.
 - `data/`: local DuckDB files and uploads, ignored by git.

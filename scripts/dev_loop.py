@@ -56,6 +56,10 @@ def check_imports() -> None:
         print(f"  OK {module_name}")
 
 
+def run_tenant_config_smoke_test() -> None:
+    run_command([sys.executable, "scripts/smoke_tenant_config.py"])
+
+
 def run_client_database_smoke_test(client_id: str) -> None:
     database_path = DEV_DATABASE_DIR / f"scry_dev_loop_{client_id}.duckdb"
     wal_path = database_path.with_suffix(f"{database_path.suffix}.wal")
@@ -87,6 +91,7 @@ def main() -> None:
 
     check_python_syntax()
     check_imports()
+    run_tenant_config_smoke_test()
 
     if args.with_db:
         run_local_database_smoke_test()
