@@ -187,6 +187,8 @@ list_tables = ingest.list_tables
 quote_identifier = ingest.quote_identifier
 save_uploaded_files = ingest.save_uploaded_files
 PREVIEW_TABLES = [
+    "source_data",
+    "clean_invoice_lines",
     "facturas_individuales",
     "pipeline_runs",
     "providers",
