@@ -20,8 +20,10 @@ UPLOAD_DIR = Path("data/uploads")
 VALID_TABLE_NAME = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 ELECTRONIC_DOCUMENT_TYPES = {
     "FacturaElectronica": "FACTURA",
+    "TiqueteElectronico": "TIQUETE",
     "NotaCreditoElectronica": "NOTA_CREDITO",
 }
+INVOICE_DOCUMENT_TYPES = {"FACTURA", "TIQUETE"}
 CREDIT_NOTE_REVIEW_COLUMNS = {
     "FechaEmision": "FECHA NOTA DE CREDITO",
     "Emisor_Nombre": "PROVEEDOR",
@@ -169,9 +171,9 @@ def load_invoice_csvs(source_paths: list[Path], table_name: str = "source_data",
 def parse_electronic_document_xml(xml_path: Path) -> list[dict]:
     """Parse a supported Costa Rica electronic document into line records.
 
-    Supported business documents are invoices and credit notes. Hacienda
-    response envelopes are intentionally ignored because they do not contain
-    line-level payable data.
+    Supported business documents are invoices, electronic tickets, and credit
+    notes. Hacienda response envelopes are intentionally ignored because they do
+    not contain line-level payable data.
     """
 
     try:
@@ -274,12 +276,12 @@ def parse_electronic_document_xml(xml_path: Path) -> list[dict]:
 
 
 def parse_invoice_xml(xml_path: Path) -> list[dict]:
-    """Return only invoice rows from a supported electronic document XML."""
+    """Return invoice-like payable rows from a supported electronic document XML."""
 
     return [
         row
         for row in parse_electronic_document_xml(xml_path)
-        if row["TipoDocumento"] == "FACTURA"
+        if row["TipoDocumento"] in INVOICE_DOCUMENT_TYPES
     ]
 
 
@@ -326,8 +328,9 @@ def format_credit_notes_for_review(frame: pd.DataFrame) -> pd.DataFrame:
 def load_invoice_xmls(source_paths: list[Path], table_name: str = "source_data", replace: bool = True) -> InvoiceLoadResult:
     """Load invoice XML files into `source_data`.
 
-    Mixed uploads are tolerated: non-invoice electronic documents are ignored by
-    the parser, and the function fails only if no invoice line items are found.
+    Mixed uploads are tolerated: non-payable electronic documents are ignored by
+    the parser, and the function fails only if no invoice-like line items are
+    found.
     """
 
     if not source_paths:
