@@ -16,7 +16,7 @@ from src.history import (
     refresh_current_run_tables,
 )
 from src.ingest import (
-    deduplicate_invoice_lines,
+    # deduplicate_invoice_lines,
     format_credit_notes_for_review,
     parse_credit_note_xml,
     parse_invoice_xml,
@@ -86,7 +86,9 @@ def run_full_pipeline(
     try:
         invoice_frame = parse_invoice_xmls(invoice_paths)
         invoice_rows_uploaded = len(invoice_frame)
-        invoice_frame, invoice_duplicates_removed = deduplicate_invoice_lines(invoice_frame)
+        # Deduplication is disabled for testing so repeated invoice lines remain visible.
+        # invoice_frame, invoice_duplicates_removed = deduplicate_invoice_lines(invoice_frame)
+        invoice_duplicates_removed = 0
         invoice_rows_loaded = append_history_frame("source_data_history", invoice_frame, run_id)
 
         credit_note_frame = parse_credit_note_xmls(credit_note_paths)
@@ -95,7 +97,8 @@ def run_full_pipeline(
         credit_note_rows_loaded = 0
 
         if not credit_note_frame.empty:
-            credit_note_frame, credit_note_duplicates_removed = deduplicate_invoice_lines(credit_note_frame)
+            # Deduplication is disabled for testing so repeated credit-note lines remain visible.
+            # credit_note_frame, credit_note_duplicates_removed = deduplicate_invoice_lines(credit_note_frame)
             credit_note_rows_loaded = append_history_frame("credit_note_lines_history", credit_note_frame, run_id)
 
         refresh_current_run_tables(run_id)

@@ -128,7 +128,8 @@ def build_derived_tables() -> dict[str, int]:
                     ) as descuento_estimado
                 from deduped_source
                 where try_cast(FechaEmision as timestamp) <= cast(current_timestamp as timestamp)
-                  and duplicate_rank = 1
+                  -- Deduplication is disabled for testing so repeated invoice lines remain visible.
+                  -- and duplicate_rank = 1
             )
             select
                 *,

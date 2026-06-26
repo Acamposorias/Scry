@@ -20,10 +20,8 @@ UPLOAD_DIR = Path("data/uploads")
 VALID_TABLE_NAME = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 ELECTRONIC_DOCUMENT_TYPES = {
     "FacturaElectronica": "FACTURA",
-    "TiqueteElectronico": "TIQUETE",
     "NotaCreditoElectronica": "NOTA_CREDITO",
 }
-INVOICE_DOCUMENT_TYPES = {"FACTURA", "TIQUETE"}
 CREDIT_NOTE_REVIEW_COLUMNS = {
     "FechaEmision": "FECHA NOTA DE CREDITO",
     "Emisor_Nombre": "PROVEEDOR",
@@ -152,7 +150,9 @@ def load_invoice_csvs(source_paths: list[Path], table_name: str = "source_data",
 
     combined = pd.concat(frames, ignore_index=True, sort=False).fillna("")
     total_rows_uploaded = len(combined)
-    combined, duplicate_rows_removed = deduplicate_invoice_lines(combined)
+    # Deduplication is disabled for testing so repeated invoice lines remain visible.
+    # combined, duplicate_rows_removed = deduplicate_invoice_lines(combined)
+    duplicate_rows_removed = 0
     table_identifier = quote_identifier(table_name)
     create_mode = "or replace" if replace else ""
 
@@ -171,9 +171,9 @@ def load_invoice_csvs(source_paths: list[Path], table_name: str = "source_data",
 def parse_electronic_document_xml(xml_path: Path) -> list[dict]:
     """Parse a supported Costa Rica electronic document into line records.
 
-    Supported business documents are invoices, electronic tickets, and credit
-    notes. Hacienda response envelopes are intentionally ignored because they do
-    not contain line-level payable data.
+    Supported business documents are invoices and credit notes. Hacienda
+    response envelopes are intentionally ignored because they do not contain
+    line-level payable data.
     """
 
     try:
@@ -276,12 +276,12 @@ def parse_electronic_document_xml(xml_path: Path) -> list[dict]:
 
 
 def parse_invoice_xml(xml_path: Path) -> list[dict]:
-    """Return invoice-like payable rows from a supported electronic document XML."""
+    """Return only invoice rows from a supported electronic document XML."""
 
     return [
         row
         for row in parse_electronic_document_xml(xml_path)
-        if row["TipoDocumento"] in INVOICE_DOCUMENT_TYPES
+        if row["TipoDocumento"] == "FACTURA"
     ]
 
 
@@ -328,9 +328,8 @@ def format_credit_notes_for_review(frame: pd.DataFrame) -> pd.DataFrame:
 def load_invoice_xmls(source_paths: list[Path], table_name: str = "source_data", replace: bool = True) -> InvoiceLoadResult:
     """Load invoice XML files into `source_data`.
 
-    Mixed uploads are tolerated: non-payable electronic documents are ignored by
-    the parser, and the function fails only if no invoice-like line items are
-    found.
+    Mixed uploads are tolerated: non-invoice electronic documents are ignored by
+    the parser, and the function fails only if no invoice line items are found.
     """
 
     if not source_paths:
@@ -352,7 +351,9 @@ def load_invoice_xmls(source_paths: list[Path], table_name: str = "source_data",
 
     combined = pd.DataFrame(rows).fillna("")
     total_rows_uploaded = len(combined)
-    combined, duplicate_rows_removed = deduplicate_invoice_lines(combined)
+    # Deduplication is disabled for testing so repeated invoice lines remain visible.
+    # combined, duplicate_rows_removed = deduplicate_invoice_lines(combined)
+    duplicate_rows_removed = 0
     row_count = write_frame_to_table(combined, table_name, replace=replace)
 
     return InvoiceLoadResult(
@@ -384,7 +385,9 @@ def load_credit_note_xmls(source_paths: list[Path], table_name: str = "credit_no
 
     combined = pd.DataFrame(rows).fillna("")
     total_rows_uploaded = len(combined)
-    combined, duplicate_rows_removed = deduplicate_invoice_lines(combined)
+    # Deduplication is disabled for testing so repeated credit-note lines remain visible.
+    # combined, duplicate_rows_removed = deduplicate_invoice_lines(combined)
+    duplicate_rows_removed = 0
     detail_table_name = "credit_note_lines" if table_name == "credit_notes" else f"{table_name}_lines"
     write_frame_to_table(combined, detail_table_name, replace=replace)
     row_count = write_frame_to_table(format_credit_notes_for_review(combined), table_name, replace=replace)
