@@ -29,6 +29,32 @@ CREDIT_NOTE_REVIEW_COLUMNS = {
     "Receptor_Nombre": "RUBRO",
     "MontoTotalLinea": "FINAL",
 }
+SOURCE_DATA_REQUIRED_COLUMNS = [
+    "SourceFile",
+    "NumeroConsecutivo",
+    "FechaEmision",
+    "Emisor_Nombre",
+    "Emisor_NombreComercial",
+    "Emisor_Identificacion",
+    "Receptor_Nombre",
+    "Receptor_Identificacion",
+    "NumeroLinea",
+    "CodigoCABYS",
+    "Cantidad",
+    "UnidadMedida",
+    "TipoTransaccion",
+    "Detalle",
+    "PrecioUnitario",
+    "MontoTotal",
+    "SubTotal",
+    "BaseImponible",
+    "ImpuestoNeto",
+    "MontoTotalLinea",
+    "Impuesto_Codigo",
+    "Impuesto_CodigoTarifaIVA",
+    "Impuesto_Tarifa",
+    "Impuesto_Monto",
+]
 
 
 @dataclass(frozen=True)
@@ -305,6 +331,47 @@ def write_frame_to_table(frame: pd.DataFrame, table_name: str, replace: bool = T
         connection.register("table_frame", frame)
         connection.execute(f"create {create_mode} table {table_identifier} as select * from table_frame")
         return connection.execute(f"select count(*) from {table_identifier}").fetchone()[0]
+
+
+def load_source_data_files(source_paths: list[Path], table_name: str = "source_data", replace: bool = True) -> InvoiceLoadResult:
+    """Load prepared source_data CSV/XLSX files into the invoice staging table."""
+
+    if not source_paths:
+        raise ValueError("Upload at least one prepared source_data file.")
+
+    frames = []
+
+    for source_path in source_paths:
+        if not source_path.exists():
+            raise FileNotFoundError(f"Source data file not found: {source_path}")
+
+        extension = source_path.suffix.lower()
+
+        if extension == ".csv":
+            frame = pd.read_csv(source_path, dtype=str, keep_default_na=False)
+        elif extension in {".xlsx", ".xls"}:
+            frame = pd.read_excel(source_path, dtype=str, keep_default_na=False)
+        else:
+            raise ValueError(f"Prepared source_data uploads only support CSV or Excel files: {source_path.name}")
+
+        if "SourceFile" not in frame.columns:
+            frame.insert(0, "SourceFile", source_path.name)
+
+        frames.append(frame)
+
+    combined = pd.concat(frames, ignore_index=True, sort=False).fillna("")
+    missing_columns = [column for column in SOURCE_DATA_REQUIRED_COLUMNS if column not in combined.columns]
+
+    if missing_columns:
+        raise ValueError(f"Prepared source_data is missing columns: {', '.join(missing_columns)}")
+
+    row_count = write_frame_to_table(combined, table_name, replace=replace)
+
+    return InvoiceLoadResult(
+        total_rows_uploaded=len(combined),
+        duplicate_rows_removed=0,
+        final_rows_loaded=row_count,
+    )
 
 
 def format_credit_notes_for_review(frame: pd.DataFrame) -> pd.DataFrame:

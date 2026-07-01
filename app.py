@@ -416,6 +416,12 @@ with st.sidebar:
         accept_multiple_files=True,
         key="credit_note_xmls",
     )
+    prepared_source_data_files = st.file_uploader(
+        "Upload prepared source_data",
+        type=["csv", "xlsx"],
+        accept_multiple_files=True,
+        key="prepared_source_data_files",
+    )
 
     if st.button("Run full pipeline", disabled=not invoice_xmls, use_container_width=True):
         try:
@@ -441,6 +447,21 @@ with st.sidebar:
                 f"loaded {pipeline_result.invoice_rows_loaded:,} invoice rows. "
                 f"Parsed {pipeline_result.credit_note_rows_uploaded:,} credit note rows, "
                 f"loaded {pipeline_result.credit_note_rows_loaded:,} credit note rows. "
+                f"Generated tables. {summary}"
+            )
+        except Exception as error:
+            st.error(str(error))
+
+    if st.button("Replace source_data and rebuild", disabled=not prepared_source_data_files, use_container_width=True):
+        try:
+            saved_source_data_paths = save_uploaded_files(prepared_source_data_files)
+            source_data_result = ingest.load_source_data_files(saved_source_data_paths)
+            row_counts = build_derived_tables()
+            st.cache_data.clear()
+            summary = ", ".join(f"{name}: {count:,}" for name, count in row_counts.items())
+            st.success(
+                "Replaced source_data. "
+                f"Loaded {source_data_result.final_rows_loaded:,} rows. "
                 f"Generated tables. {summary}"
             )
         except Exception as error:
