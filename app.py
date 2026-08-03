@@ -188,16 +188,24 @@ quote_identifier = ingest.quote_identifier
 save_uploaded_files = ingest.save_uploaded_files
 PREVIEW_TABLES = [
     "source_data",
+    "source_data_history",
     "clean_invoice_lines",
     "facturas_individuales",
     "pipeline_runs",
+    "manual_edits_history",
     "providers",
     "invoice_summary",
     "latest_price_list",
     "credit_notes",
+    "credit_note_lines_history",
     "price_changes",
 ]
-READ_ONLY_PREVIEW_TABLES = {"pipeline_runs"}
+READ_ONLY_PREVIEW_TABLES = {
+    "pipeline_runs",
+    "source_data_history",
+    "credit_note_lines_history",
+    "manual_edits_history",
+}
 
 
 st.set_page_config(
